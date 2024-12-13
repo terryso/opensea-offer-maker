@@ -1,0 +1,39 @@
+{
+    "name": "opensea-offer-maker",
+    "version": "1.0.0",
+    "type": "module",
+    "description": "在 OpenSea 上创建 NFT offer 的工具",
+    "main": "src/cli.js",
+    "scripts": {
+        "start": "node src/cli.js",
+        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/(?!.*integration.test.js$).*test.js$\" --coverage",
+        "integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/.*integration.test.js$\" --testTimeout=30000",
+        "test:opensea": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
+        "test:opensea:debug": "DEBUG=true node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
+        "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t"
+    },
+    "dependencies": {
+        "commander": "^12.1.0",
+        "dotenv": "^16.4.5",
+        "ethers": "^6.13.4",
+        "opensea-js": "^7.1.14"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "jest": {
+        "transform": {},
+        "testEnvironment": "node",
+        "moduleNameMapper": {
+            "^(\\.{1,2}/.*)\\.js$": "$1"
+        },
+        "clearMocks": true,
+        "resetMocks": true,
+        "restoreMocks": true
+    },
+    "devDependencies": {
+        "@babel/preset-env": "^7.26.0",
+        "babel-jest": "^29.7.0",
+        "jest": "^29.7.0"
+    }
+}
