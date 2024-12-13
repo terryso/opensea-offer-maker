@@ -57,7 +57,7 @@ export class OpenSeaApi {
         try {
             const url = new URL(`${this.baseUrl}/api/v2/offers/collection/${collectionSlug}`);
             
-            logger.debug('Fetching collection offers:', url.toString());
+            // logger.debug('Fetching collection offers:', url.toString());
             
             const response = await this.fetchWithRetry(url.toString(), { 
                 method: 'GET',
@@ -67,7 +67,7 @@ export class OpenSeaApi {
                 }
             });
 
-            logger.debug('Collection offers response:', JSON.stringify(response, null, 2));
+            // logger.debug('Collection offers response:', JSON.stringify(response, null, 2));
             return response;
 
         } catch (error) {
@@ -141,7 +141,7 @@ export class OpenSeaApi {
         try {
             const url = new URL(`${this.baseUrl}/api/v2/collections/${collectionSlug}`);
             
-            logger.debug('Fetching collection info:', url.toString());
+            // logger.debug('Fetching collection info:', url.toString());
             
             const response = await this.fetchWithRetry(url.toString(), {
                 method: 'GET',
@@ -151,11 +151,42 @@ export class OpenSeaApi {
                 }
             });
 
-            logger.debug('Collection info response:', JSON.stringify(response, null, 2));
+            // logger.debug('Collection info response:', JSON.stringify(response, null, 2));
             return response;
         } catch (error) {
             logger.error('Failed to fetch collection info:', error);
             return null;
+        }
+    }
+
+    async getCollectionStats(collectionSlug) {
+        try {
+            const url = new URL(`${this.baseUrl}/api/v2/collections/${collectionSlug}/stats`);
+            
+            logger.debug('Fetching collection stats:', url.toString());
+            
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
+            // logger.debug('Collection stats response:', JSON.stringify(response, null, 2));
+            
+            if (!response?.total?.floor_price) {
+                logger.error('Floor price not found in response:', response);
+                throw new Error('Floor price not available');
+            }
+
+            return {
+                ...response,
+                floor_price: response.total.floor_price
+            };
+        } catch (error) {
+            logger.error('Failed to fetch collection stats:', error);
+            throw error;
         }
     }
 } 

@@ -102,6 +102,7 @@ const autoOfferCommand = new Command('auto')
     .requiredOption('--max <price>', 'Maximum offer price (WETH)')
     .option('--increment <amount>', 'Amount to increase price by (WETH)', '0.0001')
     .option('--interval <seconds>', 'Check interval (seconds)', '60')
+    .option('--floor-percentage <percentage>', 'Maximum percentage of floor price', '100')
     .option('--debug', 'Enable debug logging');
 
 // Add chain option
@@ -135,7 +136,8 @@ autoOfferCommand.action(async (options) => {
             maxPrice: options.max,
             increment: options.increment,
             checkIntervalSeconds: parseInt(options.interval),
-            walletAddress: WALLET_ADDRESS
+            walletAddress: WALLET_ADDRESS,
+            floorPricePercentage: parseFloat(options.floorPercentage)
         });
 
         // Validate parameters

@@ -10,6 +10,7 @@ export class OfferStrategy {
         this.increment = config.increment || '0.0001';
         this.checkIntervalSeconds = config.checkIntervalSeconds || 60;
         this.walletAddress = config.walletAddress;
+        this.floorPricePercentage = config.floorPricePercentage || null;
         this.running = false;
         this.timerId = null;
         this.retryCount = config.retryCount || 3;
@@ -31,7 +32,39 @@ export class OfferStrategy {
         return priceNum >= minNum && priceNum <= maxNum;
     }
 
-    calculateNewOfferPrice(currentBestOffer) {
+    async validateFloorPriceLimit(price, collectionSlug) {
+        if (!this.floorPricePercentage) {
+            return true;
+        }
+
+        try {
+            const stats = await this.openSeaApi.getCollectionStats(collectionSlug);
+            const floorPrice = stats.floor_price;
+            
+            if (!floorPrice) {
+                logger.warn('Unable to get floor price for collection');
+                return true;
+            }
+
+            const maxAllowedPrice = floorPrice * (this.floorPricePercentage / 100);
+            const offerPrice = parseFloat(price);
+
+            logger.debug('Floor price validation:', {
+                floorPrice,
+                percentage: this.floorPricePercentage,
+                maxAllowedPrice,
+                offerPrice,
+                isValid: offerPrice <= maxAllowedPrice
+            });
+
+            return offerPrice <= maxAllowedPrice;
+        } catch (error) {
+            logger.error('Error validating floor price limit:', error);
+            return true; // 发生错误时，默认允许offer
+        }
+    }
+
+    async calculateNewOfferPrice(currentBestOffer, collectionSlug) {
         if (!currentBestOffer) {
             logger.debug('No current best offer, using min price:', this.minPrice);
             return this.minPrice;
@@ -50,21 +83,26 @@ export class OfferStrategy {
             newUnitPrice,
             increment: this.increment,
             minPrice: this.minPrice,
-            maxPrice: this.maxPrice
+            maxPrice: this.maxPrice,
+            floorPricePercentage: this.floorPricePercentage
         });
 
-        const isValid = this.validatePriceRange(newUnitPrice);
-        if (!isValid) {
-            logger.debug('New unit price outside of range:', {
+        const isInPriceRange = this.validatePriceRange(newUnitPrice);
+        const isInFloorPriceLimit = await this.validateFloorPriceLimit(newUnitPrice, collectionSlug);
+
+        if (!isInPriceRange || !isInFloorPriceLimit) {
+            logger.debug('New unit price validation failed:', {
                 newUnitPrice,
+                isInPriceRange,
+                isInFloorPriceLimit,
                 minPrice: this.minPrice,
                 maxPrice: this.maxPrice,
-                isAboveMin: parseFloat(newUnitPrice) >= parseFloat(this.minPrice),
-                isBelowMax: parseFloat(newUnitPrice) <= parseFloat(this.maxPrice)
+                floorPricePercentage: this.floorPricePercentage
             });
+            return null;
         }
         
-        return isValid ? newUnitPrice : null;
+        return newUnitPrice;
     }
 
     async checkAndCreateOffer(params) {
@@ -75,19 +113,13 @@ export class OfferStrategy {
             }
             const contractAddress = collectionInfo.contracts[0].address;
             
-            logger.debug('Collection info:', {
-                slug: params.collectionSlug,
-                contractAddress,
-                contracts: collectionInfo.contracts
-            });
-
             const bestOffer = await this.getBestOffer(params);
             
             if (!bestOffer || bestOffer.maker.address.toLowerCase() !== this.walletAddress.toLowerCase()) {
-                const newUnitPrice = this.calculateNewOfferPrice(bestOffer?.price);
+                const newUnitPrice = await this.calculateNewOfferPrice(bestOffer?.price, params.collectionSlug);
                 
                 if (!newUnitPrice) {
-                    logger.info('New price exceeds maximum price limit');
+                    logger.info('New price exceeds limit (either max price or floor price percentage)');
                     return null;
                 }
 
@@ -154,10 +186,11 @@ export class OfferStrategy {
                 }, null);
 
                 logger.debug('Best offer found:', {
-                    value: bestOffer.price.value,
+                    // value: bestOffer.price.value,
                     quantity: bestOffer.protocol_data.parameters.consideration[0].startAmount,
                     unitPrice: ethers.formatEther(BigInt(bestOffer.price.value) / BigInt(bestOffer.protocol_data.parameters.consideration[0].startAmount)),
-                    maker: bestOffer.protocol_data.parameters.offerer
+                    maker: bestOffer.protocol_data.parameters.offerer,
+                    myself: bestOffer.protocol_data.parameters.offerer.toLowerCase() === this.walletAddress.toLowerCase()
                 });
 
                 return {
