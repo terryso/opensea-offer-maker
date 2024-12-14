@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { Chain, OpenSeaSDK } from "opensea-js";
 import { AlchemyProvider, ethers } from "ethers";
+import { logger } from './utils/logger.js';
 
 dotenv.config();
 
@@ -8,6 +9,7 @@ dotenv.config();
 export const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
 export const WALLET_PRIV_KEY = process.env.WALLET_PRIV_KEY;
 export const ALCHEMY_API_KEY_MAINNET = process.env.ALCHEMY_API_KEY;
+export const RESERVOIR_API_KEY = process.env.RESERVOIR_API_KEY;
 
 // Validate environment variables
 if (!OPENSEA_API_KEY || !WALLET_PRIV_KEY || !ALCHEMY_API_KEY_MAINNET) {

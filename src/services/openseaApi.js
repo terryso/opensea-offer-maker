@@ -53,13 +53,13 @@ export class OpenSeaApi {
         }
     }
 
-    async getCollectionOffers(collectionSlug, limit = 100) {
+    async getCollectionOffers(collectionSlug) {
         try {
             const url = new URL(`${this.baseUrl}/api/v2/offers/collection/${collectionSlug}`);
             
-            // logger.debug('Fetching collection offers:', url.toString());
+            logger.debug('Fetching collection offers:', url.toString());
             
-            const response = await this.fetchWithRetry(url.toString(), { 
+            const response = await this.fetchWithRetry(url.toString(), {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -67,12 +67,11 @@ export class OpenSeaApi {
                 }
             });
 
-            // logger.debug('Collection offers response:', JSON.stringify(response, null, 2));
+            logger.debug('Collection offers response:', JSON.stringify(response, null, 2));
+            
             return response;
-
         } catch (error) {
             logger.error('Failed to fetch collection offers:', error);
-            logger.debug('Error details:', error);
             return { offers: [] };
         }
     }
