@@ -5,7 +5,18 @@ export class ReservoirApi {
     constructor(apiKey, chainConfig) {
         this.apiKey = apiKey;
         this.chainConfig = chainConfig;
-        this.baseUrl = 'https://api.reservoir.tools';
+        
+        // 根据链选择正确的 API endpoint
+        switch (chainConfig.chain) {
+            case Chain.Base:
+                this.baseUrl = 'https://api-base.reservoir.tools';
+                break;
+            case Chain.Sepolia:
+                this.baseUrl = 'https://api-sepolia.reservoir.tools';
+                break;
+            default:
+                this.baseUrl = 'https://api.reservoir.tools';
+        }
     }
 
     async fetchWithRetry(url, options, retries = 3, delay = 1000) {
@@ -36,21 +47,27 @@ export class ReservoirApi {
     }
 
     async getTopCollections(limit = 20, options = {}) {
-        limit = limit > 20 ? 20 : limit;
-
         try {
             const url = new URL(`${this.baseUrl}/collections/v7`);
-            url.searchParams.append('limit', limit.toString());
-            url.searchParams.append('sortBy', '1DayVolume');
-            
-            if (options.maxFloorAskPrice) {
-                url.searchParams.append('maxFloorAskPrice', options.maxFloorAskPrice.toString());
-            }
-            if (options.minFloorAskPrice) {
-                url.searchParams.append('minFloorAskPrice', options.minFloorAskPrice.toString());
-            }
-            if (options.continuation) {
-                url.searchParams.append('continuation', options.continuation);
+
+            // 如果提供了合约地址，就只查询这个合约
+            if (options.contractAddress) {
+                url.searchParams.append('id', options.contractAddress);
+            } else {
+                // 否则使用常规的查询参数
+                url.searchParams.append('limit', limit.toString());
+                url.searchParams.append('sortBy', '1DayVolume');
+                url.searchParams.append('excludeSpam', 'true');
+                
+                if (options.maxFloorAskPrice) {
+                    url.searchParams.append('maxFloorAskPrice', options.maxFloorAskPrice.toString());
+                }
+                if (options.minFloorAskPrice) {
+                    url.searchParams.append('minFloorAskPrice', options.minFloorAskPrice.toString());
+                }
+                if (options.continuation) {
+                    url.searchParams.append('continuation', options.continuation);
+                }
             }
             
             logger.debug('Fetching top collections:', url.toString());
@@ -59,23 +76,22 @@ export class ReservoirApi {
                 method: 'GET'
             });
 
-            const targetChainId = this.chainConfig.chain === Chain.Base ? 8453 : 
-                                this.chainConfig.chain === Chain.Sepolia ? 11155111 : 1;
-
             return {
                 data: (response.collections || [])
-                    .filter(collection => collection.chainId === targetChainId)
                     .map(collection => ({
                         slug: collection.slug,
                         name: collection.name,
                         stats: {
                             volume24h: collection.volume?.["1day"] || 0,
                             floorPrice: collection.floorAsk?.price?.amount?.native || 0,
-                            totalSupply: collection.tokenCount
+                            topBid: collection.topBid?.price?.amount?.native || 0,
+                            totalSupply: collection.tokenCount,
+                            estimatedSales: collection.volume?.["1day"] / (collection.floorAsk?.price?.amount?.native || 1)
                         },
-                        openseaUrl: `https://opensea.io/collection/${collection.slug}`
+                        openseaUrl: `https://opensea.io/collection/${collection.slug}`,
+                        reservoirUrl: `https://explorer.reservoir.tools/${this.chainConfig.chain}/collection/${collection.id}`
                     })),
-                continuation: response.continuation
+                continuation: options.contractAddress ? null : response.continuation
             };
         } catch (error) {
             logger.error('Failed to fetch top collections:', error);
@@ -137,7 +153,6 @@ export class ReservoirApi {
 
             return {
                 data: (response.collections || [])
-                    .filter(collection => !collection.isSpam)
                     .map(collection => ({
                         name: collection.name,
                         stats: {

@@ -304,12 +304,13 @@ checkOffersCommand.action(async (options) => {
 // 在其他命令定义之后，trendingCommand 之前添加
 const scanCommand = new Command('scan')
     .description('Scan collections for trading opportunities')
-    .option('-v, --volume <volume>', 'Minimum 24h volume in ETH', '1')
-    .option('-g, --gap <gap>', 'Minimum price gap percentage', '20')
+    .option('-v, --volume <volume>', 'Minimum 24h volume in ETH')
+    .option('-g, --gap <gap>', 'Minimum price gap percentage')
+    .option('-s, --sales <sales>', 'Minimum estimated 24h sales')
     .option('-t, --top <number>', 'Number of top collections to scan', '100')
     .option('--min-floor <price>', 'Minimum floor price in ETH')
     .option('--max-floor <price>', 'Maximum floor price in ETH')
-    .option('--min-opportunities <number>', 'Minimum number of opportunities before stopping', '5')
+    .option('--min-opportunities <number>', 'Minimum number of opportunities before stopping', '10')
     .option('--debug', 'Enable debug logging');
 
 // Add chain option
@@ -388,9 +389,16 @@ scanCommand.action(async (options) => {
             logger.setLevel(LogLevel.DEBUG);
         }
 
-        logger.info(`Scanning top ${options.limit || 20} collections for opportunities...`);
-        logger.info(`Minimum 24h volume: ${options.volume} ETH`);
-        logger.info(`Minimum price gap: ${options.gap}%`);
+        logger.info(`Scanning top ${options.minOpportunities || 10} collections for opportunities...`);
+        if (options.volume) {
+            logger.info(`Minimum 24h volume: ${options.volume} ETH`);
+        }
+        if (options.sales) {
+            logger.info(`Minimum estimated 24h sales: ${options.sales}`);
+        }
+        if (options.gap) {
+            logger.info(`Minimum price gap: ${options.gap}%`);
+        }
         logger.info('------------------------\n');
 
         const reservoirApi = new ReservoirApi(RESERVOIR_API_KEY, chainConfig);
@@ -409,11 +417,138 @@ scanCommand.action(async (options) => {
             logger.info(`Highest Offer: ${opp.highestOffer.toFixed(4)} ETH`);
             logger.info(`Price Gap: ${opp.gapPercentage.toFixed(2)}%`);
             logger.info(`24h Volume: ${opp.volume24h.toFixed(2)} ETH`);
+            logger.info(`Est. 24h Sales: ${opp.estimatedSales.toFixed(2)}`);
             logger.info(`OpenSea: ${opp.openseaUrl}`);
+            logger.info(`Reservoir: ${opp.reservoirUrl}`);
         });
 
     } catch (error) {
         logger.error('Scan failed:', error);
+        process.exit(1);
+    }
+});
+
+// 修改 list 命令的定义
+const listCommand = new Command('list')
+    .description('List an NFT for sale on OpenSea')
+    .requiredOption('-a, --address <address>', 'NFT contract address')
+    .requiredOption('-t, --token-id <tokenId>', 'Token ID')
+    .option('-p, --price <price>', 'Absolute listing price in ETH')
+    .option('-f, --floor-diff <diff>', 'Price difference from floor price (e.g., +0.1, -0.1, +10%, -5%)')
+    .option('-e, --expiration <time>', 'Expiration time (e.g., 30d, 12h)', '1h')
+    .option('--debug', 'Enable debug logging');
+
+// Add chain option
+addChainOption(listCommand);
+
+listCommand.action(async (options) => {
+    try {
+        const chainConfig = SUPPORTED_CHAINS[options.chain];
+        if (!chainConfig) {
+            throw new Error(`Unsupported chain: ${options.chain}`);
+        }
+
+        if (options.debug) {
+            logger.setLevel(LogLevel.DEBUG);
+        }
+
+        // Initialize SDK with correct chain
+        const chainSpecificSdk = new OpenSeaSDK(wallet, {
+            chain: chainConfig.chain,
+            apiKey: OPENSEA_API_KEY,
+        });
+
+        // 检查价格参数
+        if (!options.price && !options.floorDiff) {
+            throw new Error('Must provide either --price or --floor-diff');
+        }
+        if (options.price && options.floorDiff) {
+            throw new Error('Cannot use both --price and --floor-diff at the same time');
+        }
+
+        // 获取地板价（如果需要）
+        let listingPrice;
+        if (options.floorDiff) {
+            // 获取合集信息和地板价
+            const reservoirApi = new ReservoirApi(RESERVOIR_API_KEY, chainConfig);
+            const collections = await reservoirApi.getTopCollections(1, {
+                contractAddress: options.address
+            });
+            
+            if (!collections?.data?.length || !collections.data[0].stats.floorPrice) {
+                throw new Error('Could not fetch floor price');
+            }
+
+            const floorPrice = collections.data[0].stats.floorPrice;
+            logger.debug(`Floor price: ${floorPrice} ETH`);
+            
+            // 解析价格差异
+            const diffMatch = options.floorDiff.match(/^([+-])(\d*\.?\d*)(%)?$/);
+            if (!diffMatch) {
+                throw new Error('Invalid floor-diff format. Use format like "+0.1", "-0.1", "+10%", or "-5%"');
+            }
+
+            const [, sign, value, isPercentage] = diffMatch;
+            if (isPercentage) {
+                // 百分比计算
+                const percentage = parseFloat(value) / 100;
+                const diff = floorPrice * percentage;
+                listingPrice = sign === '+' ? floorPrice + diff : floorPrice - diff;
+            } else {
+                // 绝对值计算
+                listingPrice = sign === '+' ? floorPrice + parseFloat(value) : floorPrice - parseFloat(value);
+            }
+
+        } else {
+            listingPrice = parseFloat(options.price);
+        }
+
+        // 处理价格精度，保留最多6位小数
+        listingPrice = parseFloat(listingPrice.toFixed(6));
+
+        if (listingPrice <= 0) {
+            throw new Error('Listing price must be greater than 0');
+        }
+
+        // 解析失效时间
+        const expirationMatch = options.expiration.match(/^(\d+)([dh])$/);
+        if (!expirationMatch) {
+            throw new Error('Invalid expiration format. Use format like "30d" for days or "12h" for hours');
+        }
+
+        const [, timeValue, timeUnit] = expirationMatch;
+        const expirationSeconds = timeUnit === 'd' 
+            ? parseInt(timeValue) * 24 * 60 * 60
+            : parseInt(timeValue) * 60 * 60;
+
+        const expirationTime = Math.round(Date.now() / 1000 + expirationSeconds);
+
+        logger.info(`Creating listing...`);
+        logger.info(`NFT: ${options.address} #${options.tokenId}`);
+        logger.info(`Price: ${listingPrice.toFixed(4)} ETH${options.floorDiff ? ` (${options.floorDiff} from floor)` : ''}`);
+        logger.info(`Expiration: ${timeValue}${timeUnit === 'd' ? ' days' : ' hours'}`);
+        logger.info('------------------------\n');
+
+        const listing = await chainSpecificSdk.createListing({
+            asset: {
+                tokenId: options.tokenId,
+                tokenAddress: options.address,
+            },
+            accountAddress: WALLET_ADDRESS,
+            startAmount: listingPrice,
+            expirationTime,
+            quantity: 1,
+        });
+
+        logger.info('Listing created successfully!');
+        logger.info(`Order hash: ${listing.orderHash}`);
+        logger.info(`OpenSea URL: https://opensea.io/assets/${chainConfig.chain}/${options.address}/${options.tokenId}`);
+
+    } catch (error) {
+        logger.error('List failed:', error);
+        if (options.debug) {
+            logger.error('Error details:', error.stack);
+        }
         process.exit(1);
     }
 });
@@ -427,6 +562,7 @@ program
     .addCommand(autoOfferCommand)
     .addCommand(checkOffersCommand)
     .addCommand(scanCommand)
-    .addCommand(trendingCommand);
+    .addCommand(trendingCommand)
+    .addCommand(listCommand);
 
 program.parse(process.argv); 

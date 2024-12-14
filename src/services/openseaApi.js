@@ -188,4 +188,28 @@ export class OpenSeaApi {
             throw error;
         }
     }
+
+    async getBestListings(collectionSlug, limit = 1) {
+        try {
+            const url = new URL(`${this.baseUrl}/api/v2/listings/collection/${collectionSlug}/best`);
+            if (limit) {
+                url.searchParams.append('limit', limit.toString());
+            }
+            
+            logger.debug('Fetching best listings:', url.toString());
+            
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
+            return response;
+        } catch (error) {
+            logger.error('Failed to fetch best listings:', error);
+            return { listings: [] };
+        }
+    }
 } 
