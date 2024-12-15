@@ -104,7 +104,9 @@ export class ScanService {
                     volume24h: collection.stats.volume24h,
                     estimatedSales: collection.stats.estimatedSales,
                     openseaUrl: collection.openseaUrl,
-                    reservoirUrl: collection.reservoirUrl
+                    reservoirUrl: collection.reservoirUrl,
+                    // 添加 blurUrl（如果存在）
+                    ...(collection.blurUrl && { blurUrl: collection.blurUrl })
                 });
 
                 // 添加调试日志

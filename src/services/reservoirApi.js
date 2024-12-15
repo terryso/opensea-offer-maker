@@ -89,7 +89,10 @@ export class ReservoirApi {
                             estimatedSales: collection.volume?.["1day"] / (collection.floorAsk?.price?.amount?.native || 1)
                         },
                         openseaUrl: `https://opensea.io/collection/${collection.slug}`,
-                        reservoirUrl: `https://explorer.reservoir.tools/${this.chainConfig.chain}/collection/${collection.id}`
+                        reservoirUrl: `https://explorer.reservoir.tools/${this.chainConfig.chain}/collection/${collection.id}`,
+                        ...(this.chainConfig.chain === 'ethereum' && {
+                            blurUrl: `https://blur.io/eth/collection/${collection.slug}`
+                        })
                     })),
                 continuation: options.contractAddress ? null : response.continuation
             };
