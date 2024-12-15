@@ -6,7 +6,8 @@ import {
     scanCommand,
     trendingCommand,
     listCommand,
-    swapCommand
+    swapCommand,
+    sendCommand
 } from './commands/index.js';
 
 const program = new Command();
@@ -21,6 +22,7 @@ program
     .addCommand(scanCommand)
     .addCommand(trendingCommand)
     .addCommand(listCommand)
-    .addCommand(swapCommand);
+    .addCommand(swapCommand)
+    .addCommand(sendCommand);
 
 program.parse(process.argv); 
