@@ -21,12 +21,11 @@ addPrivateKeyOption(offerCommand);
 
 offerCommand.action(async (options) => {
     try {
-        // Validate chain
         const chainConfig = validateChain(options.chain);
         const wallet = await getWallet(options);
         const walletAddress = await wallet.getAddress();
 
-        // Initialize SDK with correct chain and wallet
+        // 创建 SDK 实例
         const chainSpecificSdk = new OpenSeaSDK(wallet, {
             chain: chainConfig.chain,
             apiKey: OPENSEA_API_KEY,

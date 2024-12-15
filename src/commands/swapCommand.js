@@ -50,19 +50,67 @@ swapCommand.action(async (options) => {
             throw new Error(`No WETH contract address for chain: ${chainConfig.chain}`);
         }
 
+        // 检查余额
+        const balance = await wallet.provider.getBalance(walletAddress);
+        logger.debug(`Current balance: ${ethers.formatEther(balance)} ETH`);
+
+        // 获取当前 gas 价格
+        const feeData = await wallet.provider.getFeeData();
+        const gasPrice = feeData.gasPrice || 0n;
+        logger.debug(`Current gas price: ${ethers.formatUnits(gasPrice, 'gwei')} gwei`);
+
+        // 创建合约实例
+        const wethContract = new ethers.Contract(wethAddress, WETH_ABI, wallet);
+
+        // 准备交易参数
+        const txParams = options.direction === 'eth2weth' 
+            ? { value: amount }
+            : { value: 0n };
+
+        // 估算 gas 限制
+        const gasEstimate = await wallet.provider.estimateGas({
+            from: walletAddress,
+            to: wethAddress,
+            data: options.direction === 'eth2weth' 
+                ? wethContract.interface.encodeFunctionData('deposit')
+                : wethContract.interface.encodeFunctionData('withdraw', [amount]),
+            ...txParams
+        });
+
+        // 添加 20% 的 gas 缓冲
+        const gasLimit = (gasEstimate * 12n) / 10n;
+        logger.debug(`Estimated gas limit: ${gasLimit}`);
+
+        // 计算总花费（包括 gas）
+        const gasCost = gasLimit * gasPrice;
+        const totalCost = options.direction === 'eth2weth' ? amount + gasCost : gasCost;
+        logger.debug(`Gas cost: ${ethers.formatEther(gasCost)} ETH`);
+        logger.debug(`Total cost: ${ethers.formatEther(totalCost)} ETH`);
+
+        // 检查是否有足够的余额
+        if (balance < totalCost) {
+            throw new Error(`Insufficient funds. Need ${ethers.formatEther(totalCost)} ETH (including gas), but only have ${ethers.formatEther(balance)} ETH`);
+        }
+
         logger.info(`\nSwapping ${options.amount} ${options.direction === 'eth2weth' ? 'ETH → WETH' : 'WETH → ETH'}...`);
         logger.info(`Wallet: ${walletAddress}`);
         logger.info(`Chain: ${chainConfig.chain}`);
+        logger.info(`Estimated gas cost: ${ethers.formatEther(gasCost)} ETH`);
         logger.info('------------------------');
 
-        // 使用新的 wallet 实例连接合约
-        const wethContract = new ethers.Contract(wethAddress, WETH_ABI, wallet);
-
+        // 执行交易
         let tx;
         if (options.direction === 'eth2weth') {
-            tx = await wethContract.deposit({ value: amount });
+            tx = await wethContract.deposit({
+                value: amount,
+                gasLimit,
+                gasPrice
+            });
         } else {
-            tx = await wethContract.withdraw(amount);
+            tx = await wethContract.withdraw(amount, {
+                gasLimit,
+                gasPrice
+            });
         }
 
         logger.info('Transaction sent, waiting for confirmation...');

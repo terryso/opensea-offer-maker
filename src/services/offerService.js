@@ -1,9 +1,5 @@
 import { ethers } from "ethers";
-import { 
-    sdk, 
-    WETH_ABI,
-    provider
-} from "../config.js";
+import { WETH_ABI } from "../config.js";
 import { logger } from "../utils/logger.js";
 
 export class OfferService {

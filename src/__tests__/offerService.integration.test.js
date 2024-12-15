@@ -1,18 +1,8 @@
-import { createOfferService } from '../services/offerService.js';
+import { OpenSeaSDK, Chain } from 'opensea-js';
 import { ethers } from 'ethers';
 import dotenv from 'dotenv';
-import { Chain, OpenSeaSDK } from 'opensea-js';
 
-// 加载环境变量
 dotenv.config();
-
-// 验证必要的环境变量
-const requiredEnvVars = ['OPENSEA_API_KEY', 'WALLET_PRIV_KEY', 'ALCHEMY_API_KEY'];
-requiredEnvVars.forEach(varName => {
-    if (!process.env[varName]) {
-        throw new Error(`Missing required environment variable: ${varName}`);
-    }
-});
 
 // 创建真实的配置
 const provider = new ethers.AlchemyProvider("base", process.env.ALCHEMY_API_KEY);
@@ -22,18 +12,14 @@ const sdk = new OpenSeaSDK(wallet, {
     apiKey: process.env.OPENSEA_API_KEY
 });
 
-const realConfig = {
-    provider,
-    sdk,
+const chainConfig = {
+    chain: 'base',
+    wethAddress: '0x4200000000000000000000000000000000000006'
 };
 
+const service = new OfferService(sdk, chainConfig);
+
 describe('OfferService Integration', () => {
-    let service;
-
-    beforeAll(() => {
-        service = createOfferService(realConfig);
-    });
-
     describe('Individual NFT Offer', () => {
         // 使用一个已知存在的 NFT
         const TEST_NFT = {

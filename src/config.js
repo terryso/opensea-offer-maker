@@ -1,33 +1,19 @@
 import dotenv from 'dotenv';
-import { Chain, OpenSeaSDK } from "opensea-js";
-import { AlchemyProvider } from "ethers";
-import { logger } from './utils/logger.js';
+import { Chain } from "opensea-js";
 
 dotenv.config();
 
 // Environment variables
 export const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
-export const ALCHEMY_API_KEY_MAINNET = process.env.ALCHEMY_API_KEY;
+export const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 export const RESERVOIR_API_KEY = process.env.RESERVOIR_API_KEY;
 
 // Validate environment variables
-if (!OPENSEA_API_KEY || !ALCHEMY_API_KEY_MAINNET) {
-    const error = new Error("Missing environment variables. Please set OPENSEA_API_KEY and ALCHEMY_API_KEY_MAINNET.");
+if (!OPENSEA_API_KEY || !ALCHEMY_API_KEY) {
+    const error = new Error("Missing environment variables. Please set OPENSEA_API_KEY and ALCHEMY_API_KEY.");
     error.code = 'ENV_MISSING';
     throw error;
 }
-
-// Provider configuration
-export const provider = new AlchemyProvider("base", ALCHEMY_API_KEY_MAINNET);
-
-// Base chain WETH address
-export const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
-
-// OpenSea SDK configuration
-export const sdk = new OpenSeaSDK(provider, {
-    chain: Chain.Base,
-    apiKey: OPENSEA_API_KEY,
-});
 
 // Supported chains configuration
 export const SUPPORTED_CHAINS = {

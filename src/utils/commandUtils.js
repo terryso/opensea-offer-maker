@@ -1,4 +1,4 @@
-import { SUPPORTED_CHAINS, DEFAULT_CHAIN, provider } from '../config.js';
+import { SUPPORTED_CHAINS, DEFAULT_CHAIN } from '../config.js';
 import { ethers } from 'ethers';
 import { KeyManager } from '../utils/keyManager.js';
 import enquirer from 'enquirer';
@@ -38,6 +38,13 @@ export const getWallet = async (options) => {
         }
         privateKey = await KeyManager.decryptKey();
     }
+
+    // 根据指定的链创建 provider
+    const chainConfig = validateChain(options.chain);
+    const provider = new ethers.AlchemyProvider(
+        chainConfig.chain === 'ethereum' ? 'mainnet' : chainConfig.chain,
+        process.env.ALCHEMY_API_KEY
+    );
 
     return new ethers.Wallet(privateKey, provider);
 }; 
