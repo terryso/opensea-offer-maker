@@ -1,9 +1,9 @@
 import { Command } from 'commander';
 import { OpenSeaSDK } from 'opensea-js';
 import { logger, LogLevel } from '../utils/logger.js';
-import { OPENSEA_API_KEY, WALLET_ADDRESS, RESERVOIR_API_KEY, wallet } from '../config.js';
+import { OPENSEA_API_KEY } from '../config.js';
 import { ReservoirApi } from '../services/reservoirApi.js';
-import { addChainOption, validateChain } from '../utils/commandUtils.js';
+import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 
 export const listCommand = new Command('list')
     .description('List an NFT for sale on OpenSea')
@@ -16,16 +16,20 @@ export const listCommand = new Command('list')
 
 // Add chain option
 addChainOption(listCommand);
+// Add private key option
+addPrivateKeyOption(listCommand);
 
 listCommand.action(async (options) => {
     try {
         const chainConfig = validateChain(options.chain);
+        const wallet = await getWallet(options);
+        const walletAddress = await wallet.getAddress();
 
         if (options.debug) {
             logger.setLevel(LogLevel.DEBUG);
         }
 
-        // Initialize SDK with correct chain
+        // Initialize SDK with correct chain and wallet
         const chainSpecificSdk = new OpenSeaSDK(wallet, {
             chain: chainConfig.chain,
             apiKey: OPENSEA_API_KEY,
@@ -42,7 +46,6 @@ listCommand.action(async (options) => {
         // 获取地板价（如果需要）
         let listingPrice;
         if (options.floorDiff) {
-            // 获取合集信息和地板价
             const reservoirApi = new ReservoirApi(RESERVOIR_API_KEY, chainConfig);
             const collections = await reservoirApi.getTopCollections(1, {
                 contractAddress: options.address
@@ -99,6 +102,7 @@ listCommand.action(async (options) => {
         logger.info(`NFT: ${options.address} #${options.tokenId}`);
         logger.info(`Price: ${listingPrice.toFixed(4)} ETH${options.floorDiff ? ` (${options.floorDiff} from floor)` : ''}`);
         logger.info(`Expiration: ${timeValue}${timeUnit === 'd' ? ' days' : ' hours'}`);
+        logger.info(`Wallet: ${walletAddress}`);
         logger.info('------------------------\n');
 
         const listing = await chainSpecificSdk.createListing({
@@ -106,7 +110,7 @@ listCommand.action(async (options) => {
                 tokenId: options.tokenId,
                 tokenAddress: options.address,
             },
-            accountAddress: WALLET_ADDRESS,
+            accountAddress: walletAddress,
             startAmount: listingPrice,
             expirationTime,
             quantity: 1,

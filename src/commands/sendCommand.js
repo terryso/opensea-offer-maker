@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import { logger, LogLevel } from '../utils/logger.js';
 import { ethers } from 'ethers';
-import { WALLET_ADDRESS } from '../config.js';
 import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 import { SUPPORTED_TOKENS, ERC20_ABI } from '../config/tokens.js';
 
@@ -20,7 +19,7 @@ addPrivateKeyOption(sendCommand);
 sendCommand.action(async (options) => {
     try {
         const chainConfig = validateChain(options.chain);
-        const wallet = getWallet(options);
+        const wallet = await getWallet(options);
         const walletAddress = await wallet.getAddress();
 
         if (options.debug) {

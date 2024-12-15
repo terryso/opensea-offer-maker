@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import { OpenSeaSDK } from 'opensea-js';
 import { logger, LogLevel } from '../utils/logger.js';
-import { OPENSEA_API_KEY, WALLET_ADDRESS, wallet } from '../config.js';
-import { addChainOption, validateChain } from '../utils/commandUtils.js';
+import { OPENSEA_API_KEY } from '../config.js';
+import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 
 export const offerCommand = new Command('offer')
     .description('Create an offer for a single NFT or collection')
@@ -16,13 +16,17 @@ export const offerCommand = new Command('offer')
 
 // Add chain option
 addChainOption(offerCommand);
+// Add private key option
+addPrivateKeyOption(offerCommand);
 
 offerCommand.action(async (options) => {
     try {
         // Validate chain
         const chainConfig = validateChain(options.chain);
+        const wallet = await getWallet(options);
+        const walletAddress = await wallet.getAddress();
 
-        // Initialize SDK with correct chain
+        // Initialize SDK with correct chain and wallet
         const chainSpecificSdk = new OpenSeaSDK(wallet, {
             chain: chainConfig.chain,
             apiKey: OPENSEA_API_KEY,
@@ -48,7 +52,7 @@ offerCommand.action(async (options) => {
         const expirationTime = Math.round(Date.now() / 1000 + parseInt(options.expirationMinutes) * 60);
 
         logger.info('Creating offer...');
-        logger.info(`Wallet address: ${WALLET_ADDRESS}`);
+        logger.info(`Wallet address: ${walletAddress}`);
         logger.info(`Offer amount: ${options.offerAmount} WETH`);
         logger.info(`Expiration: ${options.expirationMinutes} minutes`);
 
@@ -67,7 +71,7 @@ offerCommand.action(async (options) => {
             // Create collection offer
             offer = await chainSpecificSdk.createCollectionOffer({
                 collection: options.collection,
-                accountAddress: WALLET_ADDRESS,
+                accountAddress: walletAddress,
                 amount: parseFloat(options.offerAmount),
                 expirationTime,
                 ...(options.traitType && {
@@ -84,7 +88,7 @@ offerCommand.action(async (options) => {
                     tokenId: options.tokenId,
                     tokenAddress: options.address,
                 },
-                accountAddress: WALLET_ADDRESS,
+                accountAddress: walletAddress,
                 startAmount: parseFloat(options.offerAmount),
                 expirationTime
             });

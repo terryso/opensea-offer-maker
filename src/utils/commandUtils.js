@@ -1,5 +1,8 @@
-import { SUPPORTED_CHAINS, DEFAULT_CHAIN, provider, WALLET_PRIV_KEY } from '../config.js';
+import { SUPPORTED_CHAINS, DEFAULT_CHAIN, provider } from '../config.js';
 import { ethers } from 'ethers';
+import { KeyManager } from '../utils/keyManager.js';
+import enquirer from 'enquirer';
+const { prompt } = enquirer;
 
 export const addChainOption = (command) => {
     return command.option(
@@ -26,10 +29,15 @@ export const addPrivateKeyOption = (command) => {
 };
 
 // 获取钱包实例
-export const getWallet = (options) => {
-    const privateKey = options.privateKey || WALLET_PRIV_KEY;
+export const getWallet = async (options) => {
+    let privateKey = options.privateKey;
+    
     if (!privateKey) {
-        throw new Error('No private key provided. Use --private-key or set WALLET_PRIV_KEY in .env');
+        if (!await KeyManager.isKeyStored()) {
+            throw new Error('No private key stored. Please run "key setup" first or provide --private-key');
+        }
+        privateKey = await KeyManager.decryptKey();
     }
+
     return new ethers.Wallet(privateKey, provider);
 }; 

@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 import { OpenSeaSDK } from 'opensea-js';
 import { logger, LogLevel } from '../utils/logger.js';
-import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL, WALLET_ADDRESS, wallet } from '../config.js';
+import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL } from '../config.js';
 import { OpenSeaApi } from '../services/openseaApi.js';
 import { OfferStrategy } from '../services/offerStrategy.js';
 import { OfferService } from '../services/offerService.js';
-import { addChainOption, validateChain } from '../utils/commandUtils.js';
+import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 
 export const autoOfferCommand = new Command('auto')
     .description('Automatically create offers based on floor price')
@@ -21,13 +21,16 @@ export const autoOfferCommand = new Command('auto')
 
 // Add chain option
 addChainOption(autoOfferCommand);
+// Add private key option
+addPrivateKeyOption(autoOfferCommand);
 
 autoOfferCommand.action(async (options) => {
     try {
-        // Validate chain
         const chainConfig = validateChain(options.chain);
+        const wallet = await getWallet(options);
+        const walletAddress = await wallet.getAddress();
 
-        // Initialize SDK with correct chain
+        // Initialize SDK with correct chain and wallet
         const chainSpecificSdk = new OpenSeaSDK(wallet, {
             chain: chainConfig.chain,
             apiKey: OPENSEA_API_KEY,
@@ -44,14 +47,14 @@ autoOfferCommand.action(async (options) => {
             logger.setLevel(LogLevel.DEBUG);
         }
 
-        logger.debug('Initializing strategy with wallet:', WALLET_ADDRESS);
+        logger.debug('Initializing strategy with wallet:', walletAddress);
 
         const strategy = new OfferStrategy(offerService, openSeaApi, {
             minPrice: options.min,
             maxPrice: options.max,
             increment: options.increment,
             checkIntervalSeconds: parseInt(options.interval),
-            walletAddress: WALLET_ADDRESS,
+            walletAddress: walletAddress,
             floorPricePercentage: parseFloat(options.floorPercentage)
         });
 
@@ -61,7 +64,7 @@ autoOfferCommand.action(async (options) => {
         }
 
         logger.info('Starting auto offer...');
-        logger.info(`Wallet address: ${WALLET_ADDRESS}`);
+        logger.info(`Wallet address: ${walletAddress}`);
         logger.info('Price range:', options.min, '-', options.max, 'WETH');
         logger.info('Check interval:', options.interval, 'seconds');
 

@@ -1,8 +1,7 @@
 import { Command } from 'commander';
 import { logger, LogLevel } from '../utils/logger.js';
 import { ethers } from 'ethers';
-import { WALLET_ADDRESS, wallet } from '../config.js';
-import { addChainOption, validateChain } from '../utils/commandUtils.js';
+import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 
 // WETH 合约地址
 const WETH_ADDRESSES = {
@@ -27,10 +26,14 @@ export const swapCommand = new Command('swap')
 
 // Add chain option
 addChainOption(swapCommand);
+// Add private key option
+addPrivateKeyOption(swapCommand);
 
 swapCommand.action(async (options) => {
     try {
         const chainConfig = validateChain(options.chain);
+        const wallet = await getWallet(options);
+        const walletAddress = await wallet.getAddress();
 
         if (options.debug) {
             logger.setLevel(LogLevel.DEBUG);
@@ -47,20 +50,18 @@ swapCommand.action(async (options) => {
             throw new Error(`No WETH contract address for chain: ${chainConfig.chain}`);
         }
 
-        // 连接到 WETH 合约
-        const wethContract = new ethers.Contract(wethAddress, WETH_ABI, wallet);
-
         logger.info(`\nSwapping ${options.amount} ${options.direction === 'eth2weth' ? 'ETH → WETH' : 'WETH → ETH'}...`);
-        logger.info(`Wallet: ${WALLET_ADDRESS}`);
+        logger.info(`Wallet: ${walletAddress}`);
         logger.info(`Chain: ${chainConfig.chain}`);
         logger.info('------------------------');
 
+        // 使用新的 wallet 实例连接合约
+        const wethContract = new ethers.Contract(wethAddress, WETH_ABI, wallet);
+
         let tx;
         if (options.direction === 'eth2weth') {
-            // ETH → WETH
             tx = await wethContract.deposit({ value: amount });
         } else {
-            // WETH → ETH
             tx = await wethContract.withdraw(amount);
         }
 
@@ -70,9 +71,9 @@ swapCommand.action(async (options) => {
         logger.info('Swap completed successfully!');
         logger.info(`Transaction hash: ${receipt.hash}`);
 
-        // 显示余额
-        const ethBalance = await wallet.provider.getBalance(WALLET_ADDRESS);
-        const wethBalance = await wethContract.balanceOf(WALLET_ADDRESS);
+        // 显示余额时使用新的地址
+        const ethBalance = await wallet.provider.getBalance(walletAddress);
+        const wethBalance = await wethContract.balanceOf(walletAddress);
         
         logger.info('\nCurrent balances:');
         logger.info(`ETH: ${ethers.formatEther(ethBalance)} ETH`);

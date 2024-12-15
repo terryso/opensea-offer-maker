@@ -25,7 +25,6 @@ const sdk = new OpenSeaSDK(wallet, {
 const realConfig = {
     provider,
     sdk,
-    wallet: wallet.address
 };
 
 describe('OfferService Integration', () => {

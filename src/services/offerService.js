@@ -1,7 +1,6 @@
 import { ethers } from "ethers";
 import { 
     sdk, 
-    WALLET_ADDRESS, 
     WETH_ABI,
     provider
 } from "../config.js";
@@ -14,7 +13,6 @@ export class OfferService {
         }
         this.sdk = sdk;
         this.provider = sdk.provider;
-        this.walletAddress = sdk.wallet?.address || WALLET_ADDRESS;
         this.chainConfig = chainConfig;
     }
 
@@ -56,7 +54,7 @@ export class OfferService {
             traitType, 
             traitValue,
             wethContract = new ethers.Contract(this.chainConfig.wethAddress, WETH_ABI, this.provider),
-            walletAddress = this.walletAddress
+            walletAddress = this.chainConfig.walletAddress
         } = params;
 
         this.validateCollectionOffer(collectionSlug);
@@ -89,7 +87,7 @@ export class OfferService {
             offerAmount, 
             expirationMinutes = 60,
             wethContract = new ethers.Contract(this.chainConfig.wethAddress, WETH_ABI, this.provider),
-            walletAddress = this.walletAddress
+            walletAddress = this.chainConfig.walletAddress
         } = params;
 
         this.validateIndividualOffer(tokenAddress, tokenId);
