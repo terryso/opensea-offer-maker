@@ -124,7 +124,9 @@ export class OfferStrategy {
     async checkAndCreateOffer(params) {
         try {
             let contractAddress;
-            if (params.collectionSlug) {
+            const offerType = params.type || 'collection';  // 明确指定 offer 类型
+            
+            if (offerType === 'collection') {
                 const collectionInfo = await this.openSeaApi.getCollectionInfo(params.collectionSlug);
                 if (!collectionInfo?.contracts?.[0]?.address) {
                     throw new Error('Unable to get collection contract address');
@@ -146,7 +148,7 @@ export class OfferStrategy {
 
                 logger.info(`Creating new offer, unit price: ${newUnitPrice} WETH`);
 
-                if (params.collectionSlug) {
+                if (offerType === 'collection') {
                     const offerParams = {
                         collectionSlug: params.collectionSlug,
                         tokenAddress: contractAddress,
@@ -195,7 +197,9 @@ export class OfferStrategy {
     async getBestOffer(params) {
         try {
             let offers;
-            if (params.collectionSlug) {
+            const offerType = params.type || 'collection';  // 使用相同的类型判断
+
+            if (offerType === 'collection') {
                 offers = await this.openSeaApi.getCollectionOffers(params.collectionSlug);
                 
                 if (!offers?.offers?.length) {
@@ -218,7 +222,7 @@ export class OfferStrategy {
                     return best;
                 }, null);
 
-                logger.debug('Best offer found:', {
+                logger.debug('Best collection offer found:', {
                     quantity: bestOffer.protocol_data.parameters.consideration[0].startAmount,
                     unitPrice: ethers.formatEther(BigInt(bestOffer.price.value) / BigInt(bestOffer.protocol_data.parameters.consideration[0].startAmount)),
                     maker: bestOffer.protocol_data.parameters.offerer,
@@ -245,7 +249,7 @@ export class OfferStrategy {
 
                 // 获取最高价的 offer
                 const bestOffer = offers.orders[0];
-                logger.debug('Best NFT offer found:', {
+                logger.debug('Best token offer found:', {
                     price: ethers.formatEther(bestOffer.current_price),
                     maker: bestOffer.maker.address,
                     myself: bestOffer.maker.address.toLowerCase() === this.walletAddress.toLowerCase()
