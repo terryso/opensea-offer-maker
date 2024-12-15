@@ -120,7 +120,7 @@ export class OpenSeaApi {
             
             logger.debug('Fetching best NFT offer:', url.toString());
             
-            const response = await this.fetchWithRetry(url.toString(), { 
+            const response = await this.fetchWithRetry(url.toString(), {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -128,11 +128,10 @@ export class OpenSeaApi {
                 }
             });
 
-            logger.debug('Best NFT offer response:', JSON.stringify(response, null, 2));
             return response;
         } catch (error) {
             logger.error('Failed to fetch best NFT offer:', error);
-            return { offers: [] };
+            return null;
         }
     }
 

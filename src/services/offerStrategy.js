@@ -147,86 +147,91 @@ export class OfferStrategy {
             if (await this.checkLastOffer()) {
                 logger.info('Offer was accepted, stopping auto offer...');
                 this.stop();
-                process.exit(0);  // 正常退出
+                process.exit(0);  // 这里是正常退出
                 return;
             }
 
             let contractAddress;
             const offerType = params.type || 'collection';
             
-            if (offerType === 'collection') {
-                const collectionInfo = await this.openSeaApi.getCollectionInfo(params.collectionSlug);
-                if (!collectionInfo?.contracts?.[0]?.address) {
-                    throw new Error('Unable to get collection contract address');
-                }
-                contractAddress = collectionInfo.contracts[0].address;
-            } else {
-                contractAddress = params.tokenAddress;
-            }
-            
-            const bestOffer = await this.getBestOffer(params);
-            
-            if (!bestOffer || bestOffer.maker.address.toLowerCase() !== this.walletAddress.toLowerCase()) {
-                const newUnitPrice = await this.calculateNewOfferPrice(bestOffer?.price, params.collectionSlug);
-                
-                if (!newUnitPrice) {
-                    logger.info('New price exceeds limit (either max price or floor price percentage)');
-                    return null;
-                }
-
-                logger.info(`Creating new offer, unit price: ${newUnitPrice} WETH`);
-
-                let result;
+            try {
                 if (offerType === 'collection') {
-                    const offerParams = {
-                        collectionSlug: params.collectionSlug,
-                        tokenAddress: contractAddress,
-                        offerAmount: newUnitPrice,
-                        quantity: 1,
-                        expirationMinutes: 10,
-                        walletAddress: this.walletAddress
-                    };
-
-                    logger.debug('Creating collection offer with params:', offerParams);
-
-                    try {
-                        result = await this.offerService.createCollectionOffer(offerParams);
-                    } catch (error) {
-                        logger.error('Failed to create collection offer:', error);
-                        logger.debug('Offer params:', offerParams);
-                        throw error;
+                    const collectionInfo = await this.openSeaApi.getCollectionInfo(params.collectionSlug);
+                    if (!collectionInfo?.contracts?.[0]?.address) {
+                        throw new Error('Unable to get collection contract address');
                     }
+                    contractAddress = collectionInfo.contracts[0].address;
                 } else {
-                    const offerParams = {
-                        ...params,
-                        offerAmount: newUnitPrice,
-                        expirationMinutes: 10,
-                        walletAddress: this.walletAddress
-                    };
-
-                    logger.debug('Creating individual offer with params:', offerParams);
-
-                    try {
-                        result = await this.offerService.createIndividualOffer(offerParams);
-                    } catch (error) {
-                        logger.error('Failed to create individual offer:', error);
-                        logger.debug('Offer params:', offerParams);
-                        throw error;
+                    contractAddress = params.tokenAddress;
+                }
+                
+                const bestOffer = await this.getBestOffer(params);
+                
+                if (!bestOffer || bestOffer.maker.address.toLowerCase() !== this.walletAddress.toLowerCase()) {
+                    const newUnitPrice = await this.calculateNewOfferPrice(bestOffer?.price, params.collectionSlug);
+                    
+                    if (!newUnitPrice) {
+                        logger.info('New price exceeds limit (either max price or floor price percentage)');
+                        return null;
                     }
-                }
 
-                // 保存新创建的 offer 的 hash
-                if (result) {
-                    this.lastOrderHash = result;
-                }
+                    logger.info(`Creating new offer, unit price: ${newUnitPrice} WETH`);
 
-                return result;
+                    let result;
+                    if (offerType === 'collection') {
+                        const offerParams = {
+                            collectionSlug: params.collectionSlug,
+                            tokenAddress: contractAddress,
+                            offerAmount: newUnitPrice,
+                            quantity: 1,
+                            expirationMinutes: 10,
+                            walletAddress: this.walletAddress
+                        };
+
+                        logger.debug('Creating collection offer with params:', offerParams);
+
+                        try {
+                            result = await this.offerService.createCollectionOffer(offerParams);
+                        } catch (error) {
+                            logger.error('Failed to create collection offer:', error);
+                            logger.debug('Offer params:', offerParams);
+                            return null;  // 继续运行，不抛出错误
+                        }
+                    } else {
+                        const offerParams = {
+                            ...params,
+                            offerAmount: newUnitPrice,
+                            expirationMinutes: 10,
+                            walletAddress: this.walletAddress
+                        };
+
+                        logger.debug('Creating individual offer with params:', offerParams);
+
+                        try {
+                            result = await this.offerService.createIndividualOffer(offerParams);
+                        } catch (error) {
+                            logger.error('Failed to create individual offer:', error);
+                            logger.debug('Offer params:', offerParams);
+                            return null;  // 继续运行，不抛出错误
+                        }
+                    }
+
+                    // 保存新创建的 offer 的 hash
+                    if (result) {
+                        this.lastOrderHash = result;
+                    }
+
+                    return result;
+                }
+                
+                return null;
+            } catch (error) {
+                logger.error('Error in offer creation process:', error);
+                return null;  // 继续运行，不抛出错误
             }
-            
-            return null;
         } catch (error) {
-            logger.error('Error in checkAndCreateOffer:', error);
-            throw error;
+            logger.error('Critical error in checkAndCreateOffer:', error);
+            return null;  // 继续运行，不抛出错误
         }
     }
 
@@ -275,32 +280,30 @@ export class OfferStrategy {
                     }
                 };
             } else {
-                // 获取单个 token 的 offers
-                offers = await this.openSeaApi.getNFTOffers(params.tokenAddress, params.tokenId);
+                // 获取单个 token 的最佳 offer
+                const bestOffer = await this.openSeaApi.getBestNFTOffer(params.collectionSlug, params.tokenId);
                 
-                if (!offers || !offers.orders || !offers.orders.length) {
+                if (!bestOffer) {
                     logger.debug('No NFT offers found');
                     return null;
                 }
 
-                // 获取最高价的 offer
-                const bestOffer = offers.orders[0];
-                const quantity = bestOffer.remaining_quantity || '1';  // 使用 remaining_quantity
+                const quantity = bestOffer.protocol_data.parameters.consideration[0].startAmount || '1';
 
                 logger.debug('Best token offer found:', {
-                    totalPrice: ethers.formatEther(bestOffer.current_price),
+                    totalPrice: ethers.formatEther(bestOffer.price.value),
                     quantity: quantity,
-                    maker: bestOffer.maker.address,
-                    myself: bestOffer.maker.address.toLowerCase() === this.walletAddress.toLowerCase()
+                    maker: bestOffer.protocol_data.parameters.offerer,
+                    myself: bestOffer.protocol_data.parameters.offerer.toLowerCase() === this.walletAddress.toLowerCase()
                 });
 
                 return {
                     maker: {
-                        address: bestOffer.maker.address
+                        address: bestOffer.protocol_data.parameters.offerer
                     },
                     price: {
-                        value: bestOffer.current_price,
-                        quantity: quantity  // 使用实际数量
+                        value: bestOffer.price.value,
+                        quantity: quantity
                     }
                 };
             }
