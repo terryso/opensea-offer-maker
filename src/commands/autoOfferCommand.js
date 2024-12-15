@@ -26,6 +26,11 @@ addPrivateKeyOption(autoOfferCommand);
 
 autoOfferCommand.action(async (options) => {
     try {
+        // 验证 floor-percentage 参数
+        if (options.floorPercentage && !options.collection) {
+            throw new Error('Must provide --collection when using --floor-percentage for individual NFT offers');
+        }
+
         const chainConfig = validateChain(options.chain);
         const wallet = await getWallet(options);
         const walletAddress = await wallet.getAddress();
@@ -73,7 +78,8 @@ autoOfferCommand.action(async (options) => {
             collectionSlug: options.collection
         } : {
             tokenAddress: options.address,
-            tokenId: options.tokenId
+            tokenId: options.tokenId,
+            collectionSlug: options.collection  // 传递 collection slug（如果有）
         });
 
         // Handle exit signal

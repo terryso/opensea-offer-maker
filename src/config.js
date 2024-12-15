@@ -43,5 +43,20 @@ export const OPENSEA_SEAPORT_ADDRESS = '0x00000000000000ADc04C56Bf30aC9d3c0aAF14
 
 // WETH ABI
 export const WETH_ABI = [
-    {"constant":true,"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
+    // Read-only functions
+    "function balanceOf(address owner) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    
+    // Write functions
+    "function deposit() payable",
+    "function withdraw(uint256 wad)",
+    "function approve(address guy, uint256 wad) returns (bool)",
+    "function transfer(address dst, uint256 wad) returns (bool)",
+    
+    // Events
+    "event Deposit(address indexed dst, uint256 wad)",
+    "event Withdrawal(address indexed src, uint256 wad)",
+    "event Approval(address indexed src, address indexed guy, uint256 wad)",
+    "event Transfer(address indexed src, address indexed dst, uint256 wad)"
 ]; 

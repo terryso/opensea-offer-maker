@@ -7,9 +7,30 @@ export class OfferService {
         if (!sdk) {
             throw new Error('SDK is required');
         }
+        if (!chainConfig || !chainConfig.wethAddress) {
+            throw new Error('Chain config with WETH address is required');
+        }
         this.sdk = sdk;
         this.provider = sdk.provider;
         this.chainConfig = chainConfig;
+
+        // 验证 WETH 地址
+        if (!ethers.isAddress(this.chainConfig.wethAddress)) {
+            throw new Error(`Invalid WETH address: ${this.chainConfig.wethAddress}`);
+        }
+
+        // 创建 WETH 合约实例
+        this.wethContract = new ethers.Contract(
+            this.chainConfig.wethAddress,
+            WETH_ABI,
+            this.sdk.wallet || this.provider  // 优先使用 wallet，否则使用 provider
+        );
+
+        logger.debug('WETH contract initialized:', {
+            address: this.chainConfig.wethAddress,
+            provider: this.provider ? 'yes' : 'no',
+            wallet: this.sdk.wallet ? 'yes' : 'no'
+        });
     }
 
     // Core business logic
@@ -49,31 +70,47 @@ export class OfferService {
             expirationMinutes = 60, 
             traitType, 
             traitValue,
-            wethContract = new ethers.Contract(this.chainConfig.wethAddress, WETH_ABI, this.provider),
-            walletAddress = this.chainConfig.walletAddress
+            walletAddress
         } = params;
 
-        this.validateCollectionOffer(collectionSlug);
-        const balanceInWETH = await this.getWETHBalance(wethContract, walletAddress);
-        this.validateBalance(balanceInWETH, offerAmount);
+        if (!walletAddress) {
+            throw new Error('Wallet address is required for creating collection offer');
+        }
 
-        const response = await this.sdk.createCollectionOffer({
-            collectionSlug: collectionSlug.toLowerCase(),
-            accountAddress: walletAddress,
-            amount: offerAmount,
-            expirationTime: Math.floor(Date.now() / 1000) + (expirationMinutes * 60),
-            paymentTokenAddress: this.chainConfig.wethAddress,
-            traitType,
-            traitValue,
-        });
+        try {
+            this.validateCollectionOffer(collectionSlug);
+            
+            logger.debug('Creating collection offer:', {
+                collectionSlug,
+                offerAmount,
+                walletAddress,
+                wethAddress: this.wethContract.target
+            });
 
-        const orderHash = response.order_hash || 
-                         response?.orderHash || 
-                         response?.order?.orderHash || 
-                         'Unknown';
+            const balanceInWETH = await this.getWETHBalance(this.wethContract, walletAddress);
+            this.validateBalance(balanceInWETH, offerAmount);
 
-        this.logCollectionOfferDetails(response, collectionSlug, orderHash);
-        return orderHash;
+            const response = await this.sdk.createCollectionOffer({
+                collectionSlug: collectionSlug.toLowerCase(),
+                accountAddress: walletAddress,
+                amount: offerAmount,
+                expirationTime: Math.floor(Date.now() / 1000) + (expirationMinutes * 60),
+                paymentTokenAddress: this.chainConfig.wethAddress,
+                traitType,
+                traitValue,
+            });
+
+            const orderHash = response.order_hash || 
+                             response?.orderHash || 
+                             response?.order?.orderHash || 
+                             'Unknown';
+
+            this.logCollectionOfferDetails(response, collectionSlug, orderHash);
+            return orderHash;
+        } catch (error) {
+            logger.error('Failed to create collection offer:', error);
+            throw error;
+        }
     }
 
     async createIndividualOffer(params) {

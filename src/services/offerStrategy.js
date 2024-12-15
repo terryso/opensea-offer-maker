@@ -69,49 +69,70 @@ export class OfferStrategy {
             logger.debug('No current best offer, using min price:', this.minPrice);
             return this.minPrice;
         }
-        
-        const currentQuantity = BigInt(currentBestOffer.quantity);
-        const currentTotalPrice = BigInt(currentBestOffer.value);
-        const currentUnitPrice = ethers.formatEther(currentTotalPrice / currentQuantity);
-        
-        const newUnitPrice = (parseFloat(currentUnitPrice) + parseFloat(this.increment)).toFixed(4);
-        
-        logger.debug('Price calculation:', {
-            currentTotalPrice: ethers.formatEther(currentTotalPrice),
-            currentQuantity: currentQuantity.toString(),
-            currentUnitPrice,
-            newUnitPrice,
-            increment: this.increment,
-            minPrice: this.minPrice,
-            maxPrice: this.maxPrice,
-            floorPricePercentage: this.floorPricePercentage
-        });
 
-        const isInPriceRange = this.validatePriceRange(newUnitPrice);
-        const isInFloorPriceLimit = await this.validateFloorPriceLimit(newUnitPrice, collectionSlug);
+        try {
+            // 确保 value 和 quantity 存在且有效
+            if (!currentBestOffer.value || !currentBestOffer.quantity) {
+                logger.debug('Invalid offer format, using min price:', {
+                    value: currentBestOffer.value,
+                    quantity: currentBestOffer.quantity
+                });
+                return this.minPrice;
+            }
 
-        if (!isInPriceRange || !isInFloorPriceLimit) {
-            logger.debug('New unit price validation failed:', {
+            const currentQuantity = BigInt(currentBestOffer.quantity);
+            const currentTotalPrice = BigInt(currentBestOffer.value);
+            const currentUnitPrice = ethers.formatEther(currentTotalPrice / currentQuantity);
+            
+            const newUnitPrice = (parseFloat(currentUnitPrice) + parseFloat(this.increment)).toFixed(4);
+            
+            logger.debug('Price calculation:', {
+                currentTotalPrice: ethers.formatEther(currentTotalPrice),
+                currentQuantity: currentQuantity.toString(),
+                currentUnitPrice,
                 newUnitPrice,
-                isInPriceRange,
-                isInFloorPriceLimit,
+                increment: this.increment,
                 minPrice: this.minPrice,
                 maxPrice: this.maxPrice,
                 floorPricePercentage: this.floorPricePercentage
             });
-            return null;
+
+            const isInPriceRange = this.validatePriceRange(newUnitPrice);
+            const isInFloorPriceLimit = await this.validateFloorPriceLimit(newUnitPrice, collectionSlug);
+
+            if (!isInPriceRange || !isInFloorPriceLimit) {
+                logger.debug('New unit price validation failed:', {
+                    newUnitPrice,
+                    isInPriceRange,
+                    isInFloorPriceLimit,
+                    minPrice: this.minPrice,
+                    maxPrice: this.maxPrice,
+                    floorPricePercentage: this.floorPricePercentage
+                });
+                return null;
+            }
+            
+            return newUnitPrice;
+        } catch (error) {
+            logger.error('Error calculating new offer price:', error);
+            logger.debug('Current best offer:', currentBestOffer);
+            // 如果计算出错，使用最小价格
+            return this.minPrice;
         }
-        
-        return newUnitPrice;
     }
 
     async checkAndCreateOffer(params) {
         try {
-            const collectionInfo = await this.openSeaApi.getCollectionInfo(params.collectionSlug);
-            if (!collectionInfo?.contracts?.[0]?.address) {
-                throw new Error('Unable to get collection contract address');
+            let contractAddress;
+            if (params.collectionSlug) {
+                const collectionInfo = await this.openSeaApi.getCollectionInfo(params.collectionSlug);
+                if (!collectionInfo?.contracts?.[0]?.address) {
+                    throw new Error('Unable to get collection contract address');
+                }
+                contractAddress = collectionInfo.contracts[0].address;
+            } else {
+                contractAddress = params.tokenAddress;
             }
-            const contractAddress = collectionInfo.contracts[0].address;
             
             const bestOffer = await this.getBestOffer(params);
             
@@ -131,7 +152,8 @@ export class OfferStrategy {
                         tokenAddress: contractAddress,
                         offerAmount: newUnitPrice,
                         quantity: 1,
-                        expirationMinutes: 15
+                        expirationMinutes: 15,
+                        walletAddress: this.walletAddress
                     };
 
                     logger.debug('Creating collection offer with params:', offerParams);
@@ -144,11 +166,22 @@ export class OfferStrategy {
                         throw error;
                     }
                 } else {
-                    return await this.offerService.createIndividualOffer({
+                    const offerParams = {
                         ...params,
                         offerAmount: newUnitPrice,
-                        expirationMinutes: 15
-                    });
+                        expirationMinutes: 15,
+                        walletAddress: this.walletAddress
+                    };
+
+                    logger.debug('Creating individual offer with params:', offerParams);
+
+                    try {
+                        return await this.offerService.createIndividualOffer(offerParams);
+                    } catch (error) {
+                        logger.error('Failed to create individual offer:', error);
+                        logger.debug('Offer params:', offerParams);
+                        throw error;
+                    }
                 }
             }
             
@@ -186,7 +219,6 @@ export class OfferStrategy {
                 }, null);
 
                 logger.debug('Best offer found:', {
-                    // value: bestOffer.price.value,
                     quantity: bestOffer.protocol_data.parameters.consideration[0].startAmount,
                     unitPrice: ethers.formatEther(BigInt(bestOffer.price.value) / BigInt(bestOffer.protocol_data.parameters.consideration[0].startAmount)),
                     maker: bestOffer.protocol_data.parameters.offerer,
@@ -203,24 +235,35 @@ export class OfferStrategy {
                     }
                 };
             } else {
+                // 获取单个 token 的 offers
                 offers = await this.openSeaApi.getNFTOffers(params.tokenAddress, params.tokenId);
-            }
-
-            if (!offers || !offers.orders || offers.orders.length === 0) {
-                return null;
-            }
-
-            const bestOffer = offers.orders[0];
-            return {
-                maker: {
-                    address: bestOffer.maker.address
-                },
-                price: {
-                    value: ethers.formatEther(bestOffer.current_price)
+                
+                if (!offers || !offers.orders || offers.orders.length === 0) {
+                    logger.debug('No NFT offers found');
+                    return null;
                 }
-            };
+
+                // 获取最高价的 offer
+                const bestOffer = offers.orders[0];
+                logger.debug('Best NFT offer found:', {
+                    price: ethers.formatEther(bestOffer.current_price),
+                    maker: bestOffer.maker.address,
+                    myself: bestOffer.maker.address.toLowerCase() === this.walletAddress.toLowerCase()
+                });
+
+                return {
+                    maker: {
+                        address: bestOffer.maker.address
+                    },
+                    price: {
+                        value: bestOffer.current_price,
+                        quantity: '1'  // 单个 token offer 的数量始终为 1
+                    }
+                };
+            }
         } catch (error) {
             logger.error('Error fetching best offer:', error);
+            logger.debug('Params:', params);
             return null;
         }
     }
