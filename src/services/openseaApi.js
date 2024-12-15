@@ -67,7 +67,7 @@ export class OpenSeaApi {
                 }
             });
 
-            logger.debug('Collection offers response:', JSON.stringify(response, null, 2));
+            // logger.debug('Collection offers response:', JSON.stringify(response, null, 2));
             
             return response;
         } catch (error) {
@@ -210,6 +210,31 @@ export class OpenSeaApi {
         } catch (error) {
             logger.error('Failed to fetch best listings:', error);
             return { listings: [] };
+        }
+    }
+
+    async getOrderStatus(orderHash) {
+        try {
+            const url = new URL(`${this.baseUrl}/api/v2/orders/${this.chainConfig.name}/seaport/${orderHash}`);
+            
+            logger.debug('Fetching order status:', url.toString());
+            
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
+            return {
+                fulfilled: response.order_status === 'fulfilled',
+                status: response.order_status,
+                ...response
+            };
+        } catch (error) {
+            logger.error('Failed to fetch order status:', error);
+            throw error;
         }
     }
 } 

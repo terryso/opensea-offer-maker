@@ -15,6 +15,7 @@ export class OfferStrategy {
         this.timerId = null;
         this.retryCount = config.retryCount || 3;
         this.retryDelay = config.retryDelay || 1000;
+        this.lastOrderHash = null;
     }
 
     validatePriceRange(price) {
@@ -71,7 +72,7 @@ export class OfferStrategy {
         }
 
         try {
-            // 确保 value 和 quantity 存在且有效
+            // 确保必要的字段存在
             if (!currentBestOffer.value || !currentBestOffer.quantity) {
                 logger.debug('Invalid offer format, using min price:', {
                     value: currentBestOffer.value,
@@ -116,15 +117,42 @@ export class OfferStrategy {
         } catch (error) {
             logger.error('Error calculating new offer price:', error);
             logger.debug('Current best offer:', currentBestOffer);
-            // 如果计算出错，使用最小价格
             return this.minPrice;
+        }
+    }
+
+    async checkLastOffer() {
+        if (!this.lastOrderHash) {
+            return false;
+        }
+
+        try {
+            const orderStatus = await this.openSeaApi.getOrderStatus(this.lastOrderHash);
+            if (orderStatus.fulfilled) {
+                logger.info('Previous offer was accepted!', {
+                    orderHash: this.lastOrderHash
+                });
+                return true;
+            }
+            return false;
+        } catch (error) {
+            logger.error('Failed to check order status:', error);
+            return false;
         }
     }
 
     async checkAndCreateOffer(params) {
         try {
+            // 检查上一个 offer 是否被接受
+            if (await this.checkLastOffer()) {
+                logger.info('Offer was accepted, stopping auto offer...');
+                this.stop();
+                process.exit(0);  // 正常退出
+                return;
+            }
+
             let contractAddress;
-            const offerType = params.type || 'collection';  // 明确指定 offer 类型
+            const offerType = params.type || 'collection';
             
             if (offerType === 'collection') {
                 const collectionInfo = await this.openSeaApi.getCollectionInfo(params.collectionSlug);
@@ -148,20 +176,21 @@ export class OfferStrategy {
 
                 logger.info(`Creating new offer, unit price: ${newUnitPrice} WETH`);
 
+                let result;
                 if (offerType === 'collection') {
                     const offerParams = {
                         collectionSlug: params.collectionSlug,
                         tokenAddress: contractAddress,
                         offerAmount: newUnitPrice,
                         quantity: 1,
-                        expirationMinutes: 15,
+                        expirationMinutes: 10,
                         walletAddress: this.walletAddress
                     };
 
                     logger.debug('Creating collection offer with params:', offerParams);
 
                     try {
-                        return await this.offerService.createCollectionOffer(offerParams);
+                        result = await this.offerService.createCollectionOffer(offerParams);
                     } catch (error) {
                         logger.error('Failed to create collection offer:', error);
                         logger.debug('Offer params:', offerParams);
@@ -171,20 +200,27 @@ export class OfferStrategy {
                     const offerParams = {
                         ...params,
                         offerAmount: newUnitPrice,
-                        expirationMinutes: 15,
+                        expirationMinutes: 10,
                         walletAddress: this.walletAddress
                     };
 
                     logger.debug('Creating individual offer with params:', offerParams);
 
                     try {
-                        return await this.offerService.createIndividualOffer(offerParams);
+                        result = await this.offerService.createIndividualOffer(offerParams);
                     } catch (error) {
                         logger.error('Failed to create individual offer:', error);
                         logger.debug('Offer params:', offerParams);
                         throw error;
                     }
                 }
+
+                // 保存新创建的 offer 的 hash
+                if (result) {
+                    this.lastOrderHash = result;
+                }
+
+                return result;
             }
             
             return null;
@@ -197,7 +233,7 @@ export class OfferStrategy {
     async getBestOffer(params) {
         try {
             let offers;
-            const offerType = params.type || 'collection';  // 使用相同的类型判断
+            const offerType = params.type || 'collection';
 
             if (offerType === 'collection') {
                 offers = await this.openSeaApi.getCollectionOffers(params.collectionSlug);
@@ -242,15 +278,18 @@ export class OfferStrategy {
                 // 获取单个 token 的 offers
                 offers = await this.openSeaApi.getNFTOffers(params.tokenAddress, params.tokenId);
                 
-                if (!offers || !offers.orders || offers.orders.length === 0) {
+                if (!offers || !offers.orders || !offers.orders.length) {
                     logger.debug('No NFT offers found');
                     return null;
                 }
 
                 // 获取最高价的 offer
                 const bestOffer = offers.orders[0];
+                const quantity = bestOffer.remaining_quantity || '1';  // 使用 remaining_quantity
+
                 logger.debug('Best token offer found:', {
-                    price: ethers.formatEther(bestOffer.current_price),
+                    totalPrice: ethers.formatEther(bestOffer.current_price),
+                    quantity: quantity,
                     maker: bestOffer.maker.address,
                     myself: bestOffer.maker.address.toLowerCase() === this.walletAddress.toLowerCase()
                 });
@@ -261,7 +300,7 @@ export class OfferStrategy {
                     },
                     price: {
                         value: bestOffer.current_price,
-                        quantity: '1'  // 单个 token offer 的数量始终为 1
+                        quantity: quantity  // 使用实际数量
                     }
                 };
             }
