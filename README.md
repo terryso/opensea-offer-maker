@@ -45,10 +45,19 @@ node src/cli.js send -t eth --private-key 0xYourPrivateKey ...
 
 ### Managing Private Keys
 ```bash
-# Set up encrypted private key
-node src/cli.js key setup
+# Add a new private key with a name
+node src/cli.js key add my-key
 
-# Test private key decryption
+# List all stored keys
+node src/cli.js key list
+
+# Switch active key
+node src/cli.js key use my-key
+
+# Remove a stored key
+node src/cli.js key remove my-key
+
+# Test key decryption
 node src/cli.js key test
 
 # Use temporary private key for any command
@@ -78,11 +87,14 @@ node src/cli.js offer -c collection_slug -o 0.0001 --chain base
 
 ### Auto Bidding
 ```bash
-# Automatically create offers within a price range
-node src/cli.js auto -c collection_slug --min 0.0001 --max 0.0003 --increment 0.0001 --interval 60
+# Automatically create collection offers
+node src/cli.js auto collection -c collection_slug --min 0.01 --max 0.035 --increment 0.0001 --interval 30 --floor-percentage 80
+
+# Automatically create individual token offers
+node src/cli.js auto token -a contract_address -t token_id -c collection_slug --min 0.01 --max 0.035 --increment 0.0001 --interval 30 --floor-percentage 80
 
 # Auto bidding on specific chain
-node src/cli.js auto -c collection_slug --min 0.0001 --max 0.0003 --chain ethereum
+node src/cli.js auto collection -c collection_slug --min 0.01 --max 0.035 --chain ethereum
 ```
 
 ### Send Tokens
@@ -112,8 +124,11 @@ node src/cli.js check -c scribblebears --chain base
 # Create a collection offer for 0.1 WETH
 node src/cli.js offer -c scribblebears -o 0.1 -e 60 --chain base
 
-# Auto bid between 0.1 and 0.2 WETH
-node src/cli.js auto -c scribblebears --min 0.1 --max 0.2 --chain base --debug
+# Create auto collection offers with floor price limit
+node src/cli.js auto collection -c scribblebears --min 0.01 --max 0.035 --floor-percentage 80 --chain base
+
+# Create auto token offers with floor price limit
+node src/cli.js auto token -a 0xf3ec2d6394fc899a5dc1823a205670ebb30939cc -t 0 -c scribblebears --min 0.01 --max 0.035 --floor-percentage 80 --chain base
 ```
 
 ## Security
