@@ -35,7 +35,7 @@ export const SUPPORTED_CHAINS = {
 };
 
 // Default to Base chain if not specified
-export const DEFAULT_CHAIN = 'base';
+export const DEFAULT_CHAIN = 'ethereum';
 
 // OpenSea API configuration
 export const OPENSEA_API_BASE_URL = 'https://api.opensea.io';
