@@ -1,6 +1,6 @@
 {
     "name": "opensea-offer-maker",
-    "version": "1.0.0",
+    "version": "0.0.6",
     "description": "CLI tool for making NFT offers on OpenSea and Blur",
     "type": "module",
     "main": "src/cli.js",
