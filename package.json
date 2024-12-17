@@ -5,7 +5,7 @@
     "type": "module",
     "main": "src/cli.js",
     "bin": {
-        "opensea-offer-maker": "./src/cli.js"
+        "opensea-offer": "./src/cli.js"
     },
     "files": [
         "src",
