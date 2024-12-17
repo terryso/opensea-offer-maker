@@ -115,6 +115,22 @@ node src/cli.js swap -a 0.1 -d eth2weth
 node src/cli.js swap -a 0.1 -d weth2eth
 ```
 
+### Cross-Market Listing
+```bash
+# List NFT on multiple marketplaces
+node src/cli.js list -a contract_address -t token_id -p 0.1 --marketplaces opensea,blur
+
+# List with floor price difference
+node src/cli.js list -a contract_address -t token_id --floor-diff +10% --marketplaces all
+
+# List with specific expiration
+node src/cli.js list -a contract_address -t token_id -p 0.1 -e 7d --marketplaces opensea,blur
+```
+
+Supported marketplaces:
+- OpenSea
+- Blur (Ethereum only)
+
 ## Examples
 
 ```bash

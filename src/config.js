@@ -60,3 +60,17 @@ export const WETH_ABI = [
     "event Approval(address indexed src, address indexed guy, uint256 wad)",
     "event Transfer(address indexed src, address indexed dst, uint256 wad)"
 ]; 
+
+// Reservoir API configuration
+export const RESERVOIR_API_BASE_URLS = {
+    ethereum: 'https://api.reservoir.tools',
+    base: 'https://api-base.reservoir.tools',
+    sepolia: 'https://api-sepolia.reservoir.tools'
+};
+
+// Supported marketplaces
+export const SUPPORTED_MARKETPLACES = {
+    ethereum: ['opensea', 'blur'],
+    base: ['opensea'],
+    sepolia: ['opensea']
+};

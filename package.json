@@ -13,6 +13,7 @@
         "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t"
     },
     "dependencies": {
+        "@reservoir0x/reservoir-sdk": "^2.4.32",
         "commander": "^12.1.0",
         "dotenv": "^16.4.5",
         "ethers": "^6.13.4",

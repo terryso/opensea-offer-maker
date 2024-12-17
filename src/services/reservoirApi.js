@@ -179,6 +179,80 @@ export class ReservoirApi {
         }
     }
 
+
+
+    async getListingStatus(orderId) {
+        try {
+            const url = new URL(`${this.baseUrl}/orders/status/v1`);
+            url.searchParams.append('ids', orderId);
+            
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET'
+            });
+
+            return response.orders[0];
+        } catch (error) {
+            logger.error('Failed to get listing status:', error);
+            throw error;
+        }
+    }
+
+    async getNFTRoyalties(contractAddress, tokenId) {
+        try {
+            const url = new URL(`${this.baseUrl}/tokens/details/v6`);
+            url.searchParams.append('contract', contractAddress);
+            url.searchParams.append('tokenId', tokenId);
+            
+            logger.debug('Fetching NFT royalties:', url.toString());
+            
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET'
+            });
+
+            return {
+                royalties: response.tokens?.[0]?.token?.royalties || [],
+                onChainRoyalties: response.tokens?.[0]?.token?.onChainRoyalties || [],
+                royaltyBps: response.tokens?.[0]?.token?.royaltyBps
+            };
+        } catch (error) {
+            logger.error('Failed to fetch NFT royalties:', error);
+            return null;
+        }
+    }
+
+    async getListingDetails(contractAddress, tokenId) {
+        try {
+            const url = new URL(`${this.baseUrl}/orders/asks/v4`);
+            url.searchParams.append('contract', contractAddress);
+            url.searchParams.append('tokenId', tokenId);
+            url.searchParams.append('includeRawData', 'true');
+            url.searchParams.append('sortBy', 'createdAt');
+            url.searchParams.append('limit', '1');
+            
+            logger.debug('Fetching listing details:', url.toString());
+            
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET'
+            });
+
+            if (!response.orders?.length) {
+                return null;
+            }
+
+            const order = response.orders[0];
+            return {
+                price: order.price?.netAmount?.native || 0,
+                marketplace: order.source?.name || 'unknown',
+                fees: order.fees || [],
+                royalties: order.royalties || [],
+                rawData: order.rawData
+            };
+        } catch (error) {
+            logger.error('Failed to fetch listing details:', error);
+            return null;
+        }
+    }
+
     // 可以添加更多 Reservoir 特有的方法
     // 比如取收藏品详情、交易历史等
 } 
