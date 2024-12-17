@@ -1,11 +1,11 @@
 import dotenv from 'dotenv';
 import { Chain } from "opensea-js";
+import { OPENSEA_API_KEY, ALCHEMY_API_KEY } from './utils/env.js';
 
 dotenv.config();
 
-// Environment variables
-export const OPENSEA_API_KEY = process.env.OPENSEA_API_KEY;
-export const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
+// Re-export environment variables
+export { OPENSEA_API_KEY, ALCHEMY_API_KEY };
 export const RESERVOIR_API_KEY = process.env.RESERVOIR_API_KEY;
 
 // Validate environment variables

@@ -14,12 +14,12 @@
     ],
     "scripts": {
         "start": "node src/cli.js",
-        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/(?!.*integration.test.js$).*test.js$\" --coverage",
+        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/(?!.*integration.test.js$).*test.js$\"",
+        "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/(?!.*integration.test.js$).*test.js$\" --coverage",
         "integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/.*integration.test.js$\" --testTimeout=30000",
         "test:opensea": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
         "test:opensea:debug": "DEBUG=true node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
-        "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t",
-        "prepare": "husky install"
+        "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t"
     },
     "publishConfig": {
         "access": "public"
