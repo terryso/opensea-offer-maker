@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+.env
+.env.*
+coverage
+__tests__
+.husky
+.eslintrc
+.prettierrc
+*.test.js 

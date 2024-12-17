@@ -1,16 +1,28 @@
 {
     "name": "opensea-offer-maker",
     "version": "1.0.0",
+    "description": "CLI tool for making NFT offers on OpenSea and Blur",
     "type": "module",
-    "description": "在 OpenSea 上创建 NFT offer 的工具",
     "main": "src/cli.js",
+    "bin": {
+        "opensea-offer-maker": "./src/cli.js"
+    },
+    "files": [
+        "src",
+        "README.md",
+        "LICENSE"
+    ],
     "scripts": {
         "start": "node src/cli.js",
         "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/(?!.*integration.test.js$).*test.js$\" --coverage",
         "integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/.*integration.test.js$\" --testTimeout=30000",
         "test:opensea": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
         "test:opensea:debug": "DEBUG=true node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
-        "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t"
+        "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t",
+        "prepare": "husky install"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "dependencies": {
         "@reservoir0x/reservoir-sdk": "^2.4.32",
