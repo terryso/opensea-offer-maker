@@ -15,7 +15,7 @@ export const listCommand = new Command('list')
     .requiredOption('-t, --token-id <tokenId>', 'Token ID')
     .option('-p, --price <price>', 'Absolute listing price in ETH')
     .option('-f, --floor-diff <diff>', 'Price difference from floor price (e.g., +0.1, -0.1, +10%, -5%)')
-    .option('-e, --expiration <time>', 'Expiration time (e.g., 30d, 12h)', '1h')
+    .option('-e, --expiration <time>', 'Expiration time (e.g., 30d, 12h, 45m)', '1h')
     .option('-m, --marketplaces <markets>', 'Comma-separated list of marketplaces (opensea,blur)', 'opensea,blur')
     .option('--debug', 'Enable debug logging');
 
@@ -98,15 +98,17 @@ listCommand.action(async (options) => {
         }
 
         // 解析过期时间
-        const expirationMatch = options.expiration.match(/^(\d+)([dh])$/);
+        const expirationMatch = options.expiration.match(/^(\d+)([dhm])$/);
         if (!expirationMatch) {
-            throw new Error('Invalid expiration format. Use format like "30d" for days or "12h" for hours');
+            throw new Error('Invalid expiration format. Use format like "30d" for days, "12h" for hours, or "45m" for minutes');
         }
 
         const [, timeValue, timeUnit] = expirationMatch;
         const expirationSeconds = timeUnit === 'd' 
             ? parseInt(timeValue) * 24 * 60 * 60
-            : parseInt(timeValue) * 60 * 60;
+            : timeUnit === 'h'
+                ? parseInt(timeValue) * 60 * 60
+                : parseInt(timeValue) * 60;  // 分钟
 
         const expirationTime = Math.floor(Date.now() / 1000 + expirationSeconds);
 
@@ -126,7 +128,11 @@ listCommand.action(async (options) => {
         logger.info(`Creating listing...`);
         logger.info(`NFT: ${options.address} #${options.tokenId}`);
         logger.info(`Price: ${listingPrice.toFixed(4)} ETH${options.floorDiff ? ` (${options.floorDiff} from floor)` : ''}`);
-        logger.info(`Expiration: ${timeValue}${timeUnit === 'd' ? ' days' : ' hours'}`);
+        logger.info(`Expiration: ${timeValue}${
+            timeUnit === 'd' ? ' days' : 
+            timeUnit === 'h' ? ' hours' : 
+            ' minutes'
+        }`);
         logger.info(`Marketplaces: ${marketplaces.join(', ')}`);
         logger.info(`Wallet: ${walletAddress}`);
         logger.info('------------------------\n');
