@@ -43,7 +43,23 @@
         },
         "clearMocks": true,
         "resetMocks": true,
-        "restoreMocks": true
+        "restoreMocks": true,
+        "collectCoverageFrom": [
+            "src/**/*.js",
+            "!src/__tests__/**",
+            "!src/cli.js",
+            "!src/commands/**",
+            "!src/utils/commandUtils.js",
+            "!src/utils/keyManager.js"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "branches": 75,
+                "functions": 80,
+                "lines": 80,
+                "statements": 80
+            }
+        }
     },
     "devDependencies": {
         "@babel/preset-env": "^7.26.0",
