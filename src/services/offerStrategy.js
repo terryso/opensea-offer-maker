@@ -142,6 +142,9 @@ export class OfferStrategy {
     }
 
     async checkAndCreateOffer(params) {
+        const checkTime = new Date().toISOString();
+        logger.info(`[${checkTime}] Starting offer check...`);
+
         try {
             // 检查上一个 offer 是否被接受
             if (await this.checkLastOffer()) {
@@ -153,7 +156,7 @@ export class OfferStrategy {
 
             let contractAddress;
             const offerType = params.type || 'collection';
-            
+
             try {
                 if (offerType === 'collection') {
                     const collectionInfo = await this.openSeaApi.getCollectionInfo(params.collectionSlug);
@@ -164,8 +167,14 @@ export class OfferStrategy {
                 } else {
                     contractAddress = params.tokenAddress;
                 }
-                
+
                 const bestOffer = await this.getBestOffer(params);
+
+                logger.debug('Best offer check result:', {
+                    hasBestOffer: !!bestOffer,
+                    iAmTopBidder: bestOffer?.iAmTopBidder,
+                    shouldCreateOffer: !bestOffer || !bestOffer.iAmTopBidder
+                });
 
                 // 如果没有 offer，或者自己不是最高价之一，则创建新的 offer
                 if (!bestOffer || !bestOffer.iAmTopBidder) {
@@ -271,12 +280,25 @@ export class OfferStrategy {
                 });
 
                 // 检查自己是否在最高价的 offers 中
-                const iAmTopBidder = topOffers.some(offer =>
-                    offer.protocol_data.parameters.offerer.toLowerCase() === this.walletAddress.toLowerCase()
+                const myWalletLower = this.walletAddress.toLowerCase();
+                const topOfferers = topOffers.map(offer =>
+                    offer.protocol_data.parameters.offerer.toLowerCase()
                 );
+                const iAmTopBidder = topOfferers.includes(myWalletLower);
 
-                // 选择一个代表性的最高价 offer（用于计算新价格）
-                const bestOffer = topOffers[0];
+                logger.debug('Top bidder check:', {
+                    myWallet: myWalletLower,
+                    topOfferers: topOfferers,
+                    iAmTopBidder: iAmTopBidder,
+                    topOffersCount: topOffers.length
+                });
+
+                // 选择一个代表性的最高价 offer（当单价相等时，选择数量最多的）
+                const bestOffer = topOffers.reduce((best, current) => {
+                    const bestQuantity = parseInt(best.protocol_data.parameters.consideration[0].startAmount) || 1;
+                    const currentQuantity = parseInt(current.protocol_data.parameters.consideration[0].startAmount) || 1;
+                    return currentQuantity > bestQuantity ? current : best;
+                });
 
                 logger.debug('Best collection offer found:', {
                     quantity: bestOffer.protocol_data.parameters.consideration[0].startAmount,

@@ -19,7 +19,8 @@
         "integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js \"src/__tests__/.*integration.test.js$\" --testTimeout=30000",
         "test:opensea": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
         "test:opensea:debug": "DEBUG=true node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js --testTimeout=30000",
-        "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t"
+        "test:opensea:single": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/__tests__/openseaApi.integration.test.js -t",
+        "kill-auto": "pkill -f 'cli.js auto' || echo 'No processes found'"
     },
     "publishConfig": {
         "access": "public"
@@ -54,7 +55,8 @@
             "!src/cli.js",
             "!src/commands/**",
             "!src/utils/commandUtils.js",
-            "!src/utils/keyManager.js"
+            "!src/utils/keyManager.js",
+            "!src/utils/proxySetup.js"
         ],
         "coverageThreshold": {
             "global": {

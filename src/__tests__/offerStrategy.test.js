@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { OfferStrategy } from '../services/offerStrategy.js';
 
 describe('OfferStrategy', () => {
@@ -367,13 +368,158 @@ describe('OfferStrategy', () => {
             expect(result).toBeTruthy();
             expect(result.maker.address).toBe('0xabc');
         });
+
+        it('should select offer with higher quantity when unit prices are equal', async () => {
+            mockOpenSeaApi.getCollectionOffers = async () => ({
+                offers: [
+                    {
+                        price: { value: '1000000000000000000' }, // 1 ETH total, quantity 1
+                        protocol_data: {
+                            parameters: {
+                                offerer: '0xabc',
+                                consideration: [{ startAmount: '1' }]
+                            }
+                        }
+                    },
+                    {
+                        price: { value: '2000000000000000000' }, // 2 ETH total, quantity 2 (same unit price)
+                        protocol_data: {
+                            parameters: {
+                                offerer: '0xdef',
+                                consideration: [{ startAmount: '2' }]
+                            }
+                        }
+                    }
+                ]
+            });
+
+            const result = await offerStrategy.getBestOffer({
+                collectionSlug: 'test',
+                type: 'collection'
+            });
+
+            expect(result).not.toBeNull();
+            expect(result.price.quantity).toBe('2');
+        });
+
+        it('should select offer with higher unit price when quantities are equal', async () => {
+            mockOpenSeaApi.getCollectionOffers = async () => ({
+                offers: [
+                    {
+                        price: { value: '2000000000000000000' }, // 2 ETH (higher unit price)
+                        protocol_data: {
+                            parameters: {
+                                offerer: '0xhigher',
+                                consideration: [{ startAmount: '1' }]
+                            }
+                        }
+                    },
+                    {
+                        price: { value: '1000000000000000000' }, // 1 ETH (lower unit price)
+                        protocol_data: {
+                            parameters: {
+                                offerer: '0xlower',
+                                consideration: [{ startAmount: '1' }]
+                            }
+                        }
+                    }
+                ]
+            });
+
+            const result = await offerStrategy.getBestOffer({
+                collectionSlug: 'test',
+                type: 'collection'
+            });
+
+            expect(result).not.toBeNull();
+            expect(result.maker.address).toBe('0xhigher');
+        });
+
+        it('should use default quantity of 1 when startAmount is null for individual offers', async () => {
+            mockOpenSeaApi.getBestNFTOffer = async () => ({
+                price: { value: '1000000000000000000' },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xabc',
+                        consideration: [{ startAmount: null }]
+                    }
+                }
+            });
+
+            const result = await offerStrategy.getBestOffer({
+                collectionSlug: 'test',
+                tokenId: '123',
+                type: 'token'
+            });
+
+            expect(result).not.toBeNull();
+            expect(result.price.quantity).toBe('1');
+        });
     });
 
-    describe('start and stop interaction', () => {
+    describe('start', () => {
+        beforeEach(() => {
+            jest.useFakeTimers();
+        });
+
+        afterEach(() => {
+            jest.clearAllTimers();
+            jest.useRealTimers();
+            if (offerStrategy.timerId) {
+                offerStrategy.stop();
+            }
+        });
+
         it('should not start if already running', () => {
             offerStrategy.running = true;
             offerStrategy.start({ collectionSlug: 'test' });
             expect(offerStrategy.timerId).toBe(null);
+        });
+
+        it('should call checkAndCreateOffer immediately and set up interval', () => {
+            const spy = jest.spyOn(offerStrategy, 'checkAndCreateOffer').mockResolvedValue(null);
+
+            const params = { collectionSlug: 'test', type: 'collection' };
+            offerStrategy.start(params);
+
+            expect(spy).toHaveBeenCalledTimes(1);
+            expect(spy).toHaveBeenCalledWith(params);
+            expect(offerStrategy.running).toBe(true);
+            expect(offerStrategy.timerId).not.toBeNull();
+
+            spy.mockRestore();
+        });
+
+        it('should call checkAndCreateOffer repeatedly via interval', () => {
+            const spy = jest.spyOn(offerStrategy, 'checkAndCreateOffer').mockResolvedValue(null);
+
+            const params = { collectionSlug: 'test', type: 'collection' };
+            offerStrategy.start(params);
+
+            expect(spy).toHaveBeenCalledTimes(1);
+
+            jest.advanceTimersByTime(60000);
+            expect(spy).toHaveBeenCalledTimes(2);
+
+            jest.advanceTimersByTime(60000);
+            expect(spy).toHaveBeenCalledTimes(3);
+
+            spy.mockRestore();
+        });
+
+        it('should not call checkAndCreateOffer when stopped', () => {
+            const spy = jest.spyOn(offerStrategy, 'checkAndCreateOffer').mockResolvedValue(null);
+
+            const params = { collectionSlug: 'test', type: 'collection' };
+            offerStrategy.start(params);
+
+            expect(spy).toHaveBeenCalledTimes(1);
+
+            offerStrategy.stop();
+            jest.advanceTimersByTime(60000);
+            expect(spy).toHaveBeenCalledTimes(1);
+
+            spy.mockRestore();
         });
 
         it('should clean up timer on stop', () => {
@@ -564,6 +710,88 @@ describe('OfferStrategy', () => {
 
             const result = await offerStrategy.checkAndCreateOffer(params);
             expect(result).toBe(null);
+        });
+
+        it('should call stop and exit when offer is accepted', async () => {
+            offerStrategy.lastOrderHash = '0xhash123';
+
+            mockOpenSeaApi.getOrderStatus = async () => ({
+                fulfilled: true
+            });
+
+            const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
+                throw new Error('exit called');
+            });
+            const stopSpy = jest.spyOn(offerStrategy, 'stop');
+
+            const params = { collectionSlug: 'test', type: 'collection' };
+
+            try {
+                await offerStrategy.checkAndCreateOffer(params);
+            } catch (e) {
+                expect(e.message).toBe('exit called');
+            }
+
+            expect(stopSpy).toHaveBeenCalled();
+            expect(exitSpy).toHaveBeenCalledWith(0);
+
+            exitSpy.mockRestore();
+            stopSpy.mockRestore();
+        });
+
+        it('should return null when collection contracts array is null', async () => {
+            mockOpenSeaApi.getOrderStatus = async () => ({ fulfilled: false });
+            mockOpenSeaApi.getCollectionInfo = async () => ({
+                contracts: null
+            });
+
+            const result = await offerStrategy.checkAndCreateOffer({
+                type: 'collection',
+                collectionSlug: 'test'
+            });
+
+            expect(result).toBeNull();
+        });
+
+        it('should return null when collection contracts array is empty', async () => {
+            mockOpenSeaApi.getOrderStatus = async () => ({ fulfilled: false });
+            mockOpenSeaApi.getCollectionInfo = async () => ({
+                contracts: []
+            });
+
+            const result = await offerStrategy.checkAndCreateOffer({
+                type: 'collection',
+                collectionSlug: 'test'
+            });
+
+            expect(result).toBeNull();
+        });
+
+        it('should return null when contract address is missing', async () => {
+            mockOpenSeaApi.getOrderStatus = async () => ({ fulfilled: false });
+            mockOpenSeaApi.getCollectionInfo = async () => ({
+                contracts: [{ address: null }]
+            });
+
+            const result = await offerStrategy.checkAndCreateOffer({
+                type: 'collection',
+                collectionSlug: 'test'
+            });
+
+            expect(result).toBeNull();
+        });
+
+        it('should handle critical errors gracefully', async () => {
+            offerStrategy.checkLastOffer = async () => {
+                throw new Error('Unexpected critical error');
+            };
+
+            const result = await offerStrategy.checkAndCreateOffer({
+                type: 'collection',
+                collectionSlug: 'test'
+            });
+
+            expect(result).toBeNull();
         });
     });
 
