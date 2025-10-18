@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { OpenSeaSDK } from 'opensea-js';
 import { logger, LogLevel } from '../utils/logger.js';
 import { OPENSEA_API_KEY } from '../config.js';
-import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
+import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 
 export const offerCommand = new Command('offer')
     .description('Create an offer for a single NFT or collection')
@@ -21,7 +21,7 @@ addPrivateKeyOption(offerCommand);
 
 offerCommand.action(async (options) => {
     try {
-        const chainConfig = validateChain(options.chain);
+        const chainConfig = await getEffectiveChain(options);
         const wallet = await getWallet(options);
         const walletAddress = await wallet.getAddress();
 

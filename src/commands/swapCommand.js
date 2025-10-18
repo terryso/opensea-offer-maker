@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { logger, LogLevel } from '../utils/logger.js';
 import { ethers } from 'ethers';
-import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
+import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 
 // WETH 合约地址
 const WETH_ADDRESSES = {
@@ -31,7 +31,7 @@ addPrivateKeyOption(swapCommand);
 
 swapCommand.action(async (options) => {
     try {
-        const chainConfig = validateChain(options.chain);
+        const chainConfig = await getEffectiveChain(options);
         const wallet = await getWallet(options);
         const walletAddress = await wallet.getAddress();
 

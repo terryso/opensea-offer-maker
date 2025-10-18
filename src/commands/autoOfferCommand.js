@@ -5,7 +5,7 @@ import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL } from '../config.js';
 import { OpenSeaApi } from '../services/openseaApi.js';
 import { OfferStrategy } from '../services/offerStrategy.js';
 import { OfferService } from '../services/offerService.js';
-import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
+import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 import { SUPPORTED_CHAINS, DEFAULT_CHAIN } from '../config.js';
 
 // 创建父命令
@@ -27,7 +27,7 @@ autoOfferCommand
     .option('--private-key <key>', 'Private key to use for transaction')
     .action(async (options) => {
         try {
-            const chainConfig = validateChain(options.chain);
+            const chainConfig = await getEffectiveChain(options);
             const wallet = await getWallet(options);
             const walletAddress = await wallet.getAddress();
 
@@ -95,7 +95,7 @@ autoOfferCommand
                 throw new Error('Must provide --collection when using --floor-percentage');
             }
 
-            const chainConfig = validateChain(options.chain);
+            const chainConfig = await getEffectiveChain(options);
             const wallet = await getWallet(options);
             const walletAddress = await wallet.getAddress();
 

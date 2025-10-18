@@ -64,6 +64,39 @@ node src/cli.js key test
 --private-key <key>
 ```
 
+### Managing Default Chain
+```bash
+# View current default chain
+node src/cli.js chain get
+
+# Set default chain to base
+node src/cli.js chain set base
+
+# Set default chain to ethereum
+node src/cli.js chain set ethereum
+
+# List all supported chains
+node src/cli.js chain list
+```
+
+Once you set a default chain, all commands will use it unless you explicitly specify `--chain` option.
+
+### Check Wallet Balance
+```bash
+# Check all token balances
+node src/cli.js balance
+
+# Check balance on specific chain
+node src/cli.js balance --chain ethereum
+
+# Check specific token balance
+node src/cli.js balance --token eth
+node src/cli.js balance --token weth
+
+# Use temporary private key
+node src/cli.js balance --private-key 0xYourPrivateKey
+```
+
 ### Check Collection Offers
 ```bash
 # View current offers for a collection

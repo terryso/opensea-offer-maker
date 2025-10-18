@@ -6,4 +6,6 @@ export { trendingCommand } from './trendingCommand.js';
 export { listCommand } from './listCommand.js';
 export { swapCommand } from './swapCommand.js';
 export { sendCommand } from './sendCommand.js';
-export { keyCommand } from './keyCommand.js'; 
+export { keyCommand } from './keyCommand.js';
+export { balanceCommand } from './balanceCommand.js';
+export { chainCommand } from './chainCommand.js'; 

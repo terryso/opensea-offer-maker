@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
-import { Chain } from "opensea-js";
 import { OPENSEA_API_KEY, ALCHEMY_API_KEY } from './utils/env.js';
+import { SUPPORTED_CHAINS, FALLBACK_DEFAULT_CHAIN } from './constants/chains.js';
 
 dotenv.config();
 
@@ -15,27 +15,11 @@ if (!OPENSEA_API_KEY || !ALCHEMY_API_KEY) {
     throw error;
 }
 
-// Supported chains configuration
-export const SUPPORTED_CHAINS = {
-    ethereum: {
-        name: 'ethereum',
-        chain: Chain.Mainnet,
-        wethAddress: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
-    },
-    base: {
-        name: 'base',
-        chain: Chain.Base,
-        wethAddress: '0x4200000000000000000000000000000000000006'
-    },
-    sepolia: {
-        name: 'sepolia',
-        chain: Chain.Sepolia,
-        wethAddress: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14'
-    }
-};
+// Re-export chain configurations
+export { SUPPORTED_CHAINS };
 
-// Default to Base chain if not specified
-export const DEFAULT_CHAIN = 'ethereum';
+// Default chain (fallback value if no config file)
+export const DEFAULT_CHAIN = FALLBACK_DEFAULT_CHAIN;
 
 // OpenSea API configuration
 export const OPENSEA_API_BASE_URL = 'https://api.opensea.io';

@@ -4,7 +4,7 @@ import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL, RESERVOIR_API_KEY } from '../con
 import { OpenSeaApi } from '../services/openseaApi.js';
 import { ReservoirApi } from '../services/reservoirApi.js';
 import { ScanService } from '../services/scanService.js';
-import { addChainOption, validateChain } from '../utils/commandUtils.js';
+import { addChainOption, getEffectiveChain } from '../utils/commandUtils.js';
 
 export const trendingCommand = new Command('trending')
     .description('Scan trending collections for trading opportunities')
@@ -19,7 +19,7 @@ addChainOption(trendingCommand);
 
 trendingCommand.action(async (options) => {
     try {
-        const chainConfig = validateChain(options.chain);
+        const chainConfig = await getEffectiveChain(options);
 
         if (options.debug) {
             logger.setLevel(LogLevel.DEBUG);

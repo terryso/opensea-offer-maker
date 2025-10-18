@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { logger, LogLevel } from '../utils/logger.js';
 import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL } from '../config.js';
 import { OpenSeaApi } from '../services/openseaApi.js';
-import { addChainOption, validateChain } from '../utils/commandUtils.js';
+import { addChainOption, getEffectiveChain } from '../utils/commandUtils.js';
 import { ethers } from 'ethers';
 
 export const checkOffersCommand = new Command('check')
@@ -15,7 +15,7 @@ addChainOption(checkOffersCommand);
 
 checkOffersCommand.action(async (options) => {
     try {
-        const chainConfig = validateChain(options.chain);
+        const chainConfig = await getEffectiveChain(options);
 
         const openSeaApi = new OpenSeaApi(
             OPENSEA_API_KEY, 

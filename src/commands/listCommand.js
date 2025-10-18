@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { logger, LogLevel } from '../utils/logger.js';
 import { RESERVOIR_API_KEY } from '../config.js';
-import { addChainOption, validateChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
+import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 import { createClient, ReservoirClient } from '@reservoir0x/reservoir-sdk';
 import { ReservoirApi } from '../services/reservoirApi.js';
 import { ethers } from 'ethers';
@@ -26,7 +26,7 @@ addPrivateKeyOption(listCommand);
 
 listCommand.action(async (options) => {
     try {
-        const chainConfig = validateChain(options.chain);
+        const chainConfig = await getEffectiveChain(options);
         const wallet = await getWallet(options);
         const walletAddress = await wallet.getAddress();
 

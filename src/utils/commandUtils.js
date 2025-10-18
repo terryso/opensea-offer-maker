@@ -1,4 +1,5 @@
 import { SUPPORTED_CHAINS, DEFAULT_CHAIN } from '../config.js';
+import { ConfigManager } from '../utils/configManager.js';
 import { ethers } from 'ethers';
 import { KeyManager } from '../utils/keyManager.js';
 import enquirer from 'enquirer';
@@ -20,6 +21,25 @@ export const validateChain = (chainName) => {
     return chainConfig;
 };
 
+/**
+ * Get the effective chain to use, considering user configuration
+ * @param {Object} options - Command options
+ * @returns {Promise<Object>} Chain configuration
+ */
+export const getEffectiveChain = async (options) => {
+    let chainName = options.chain;
+
+    // If chain is the default value, check if user has configured a different default
+    if (chainName === DEFAULT_CHAIN) {
+        const configuredChain = await ConfigManager.getDefaultChain();
+        if (configuredChain) {
+            chainName = configuredChain;
+        }
+    }
+
+    return validateChain(chainName);
+};
+
 // 添加私钥选项
 export const addPrivateKeyOption = (command) => {
     return command.option(
@@ -31,7 +51,7 @@ export const addPrivateKeyOption = (command) => {
 // 获取钱包实例
 export const getWallet = async (options) => {
     let privateKey = options.privateKey;
-    
+
     if (!privateKey) {
         if (!await KeyManager.isKeyStored()) {
             throw new Error('No private key stored. Please run "key setup" first or provide --private-key');
@@ -39,8 +59,8 @@ export const getWallet = async (options) => {
         privateKey = await KeyManager.decryptKey();
     }
 
-    // 根据指定的链创建 provider
-    const chainConfig = validateChain(options.chain);
+    // 根据指定的链创建 provider（考虑用户配置的默认链）
+    const chainConfig = await getEffectiveChain(options);
     const provider = new ethers.AlchemyProvider(
         chainConfig.chain === 'ethereum' ? 'mainnet' : chainConfig.chain,
         process.env.ALCHEMY_API_KEY
