@@ -1,5 +1,9 @@
 import { logger } from '../utils/logger.js';
 import axios from 'axios';
+import { ethers } from 'ethers';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { Seaport } from '@opensea/seaport-js';
+import { ItemType } from '@opensea/seaport-js/lib/constants.js';
 
 export class OpenSeaApi {
     constructor(apiKey, baseUrl, chainConfig) {
@@ -7,14 +11,22 @@ export class OpenSeaApi {
         this.baseUrl = baseUrl;
         this.chainConfig = chainConfig;
 
+        // 代理配置
+        const proxyUrl = process.env.HTTP_PROXY || 'http://127.0.0.1:7890';
+        const httpsAgent = new HttpsProxyAgent(proxyUrl);
+
         // 创建 axios 实例，支持代理和更长的超时
         this.axiosInstance = axios.create({
             timeout: 60000, // 60秒超时
+            httpsAgent: httpsAgent,
+            proxy: false, // 禁用默认代理，使用 httpsAgent
             headers: {
                 'X-API-KEY': this.apiKey,
                 'Accept': 'application/json'
             }
         });
+        
+        logger.debug(`Using proxy: ${proxyUrl}`);
     }
 
     async fetchWithRetry(url, options, retries = 3, delay = 1000) {
@@ -151,6 +163,29 @@ export class OpenSeaApi {
         }
     }
 
+    async getCollectionByContract(contractAddress) {
+        try {
+            // OpenSea API v2 使用 contract address 作为 identifier
+            const url = new URL(`${this.baseUrl}/api/v2/chain/${this.chainConfig.name}/contract/${contractAddress}`);
+            
+            logger.debug('Fetching collection by contract:', url.toString());
+            
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
+            logger.debug('Collection by contract response:', JSON.stringify(response, null, 2));
+            return response;
+        } catch (error) {
+            logger.error('Failed to fetch collection by contract:', error);
+            return null;
+        }
+    }
+
     async getCollectionInfo(collectionSlug) {
         try {
             const url = new URL(`${this.baseUrl}/api/v2/collections/${collectionSlug}`);
@@ -249,6 +284,110 @@ export class OpenSeaApi {
             };
         } catch (error) {
             logger.error('Failed to fetch order status:', error);
+            throw error;
+        }
+    }
+
+    async createListing(params) {
+        const { contractAddress, tokenId, price, expirationTime, wallet, walletAddress } = params;
+        
+        try {
+            logger.info('Building listing order with Seaport.js...');
+            
+            const provider = wallet.provider;
+            
+            // 创建 Seaport 实例
+            const seaport = new Seaport(wallet);
+            
+            // Base 链上的 listing 使用 ETH 而不是 WETH
+            const useNativeToken = this.chainConfig.chain === 'base';
+            
+            logger.debug('Order parameters:', {
+                contractAddress,
+                tokenId,
+                price,
+                expirationTime,
+                walletAddress,
+                chain: this.chainConfig.chain,
+                useNativeToken
+            });
+
+            // 计算 OpenSea fee (1% = 100 basis points)
+            const priceInWei = ethers.parseEther(price.toString());
+            const openseaFeeRecipient = '0x0000a26b00c1F0DF003000390027140000fAa719';
+            const openseaFeeAmount = priceInWei * BigInt(100) / BigInt(10000);
+            const sellerAmount = priceInWei - openseaFeeAmount;
+
+            logger.info('Creating order with Seaport.js...');
+            
+            // 使用 Seaport.js 创建 order
+            // OpenSea conduit key
+            const openseaConduitKey = '0x0000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000';
+            
+            const { executeAllActions } = await seaport.createOrder({
+                conduitKey: openseaConduitKey,
+                offer: [
+                    {
+                        itemType: ItemType.ERC721,
+                        token: contractAddress,
+                        identifier: tokenId.toString(),
+                    }
+                ],
+                consideration: [
+                    {
+                        amount: sellerAmount.toString(),
+                        recipient: walletAddress,
+                    },
+                    {
+                        amount: openseaFeeAmount.toString(),
+                        recipient: openseaFeeRecipient,
+                    }
+                ],
+                endTime: expirationTime.toString(),
+                // 如果是 Base 链,使用 ETH,否则使用 WETH
+                ...(useNativeToken ? {} : {
+                    considerationToken: this.chainConfig.wethAddress
+                }),
+            });
+
+            logger.info('Executing order creation...');
+            const order = await executeAllActions();
+            
+            logger.info('Order created successfully');
+            logger.debug('Order structure:', JSON.stringify(order, null, 2));
+            logger.debug('Signature length:', order.signature?.length);
+            logger.info('Submitting listing to OpenSea API...');
+
+            // 提交到 OpenSea API
+            const url = `${this.baseUrl}/api/v2/orders/${this.chainConfig.chain}/seaport/listings`;
+            
+            const response = await this.axiosInstance({
+                url,
+                method: 'POST',
+                data: {
+                    parameters: order.parameters,
+                    signature: order.signature,
+                    protocol_address: '0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC'
+                }
+            });
+
+            logger.info('✅ Listing submitted successfully!');
+            return response.data;
+            
+        } catch (error) {
+            logger.error('Failed to create listing:', error.message);
+            if (error.response) {
+                logger.error('API Error Status:', error.response.status);
+                logger.error('API Error Data:', JSON.stringify(error.response.data, null, 2));
+                
+                // 显示详细的错误信息
+                if (error.response.data?.errors) {
+                    logger.error('Detailed Errors:');
+                    error.response.data.errors.forEach((err, index) => {
+                        logger.error(`  Error ${index + 1}:`, JSON.stringify(err, null, 2));
+                    });
+                }
+            }
             throw error;
         }
     }

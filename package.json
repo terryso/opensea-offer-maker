@@ -25,11 +25,13 @@
         "access": "public"
     },
     "dependencies": {
+        "@opensea/seaport-js": "^4.0.5",
         "@reservoir0x/reservoir-sdk": "^2.4.32",
         "axios": "^1.12.2",
         "commander": "^12.1.0",
         "dotenv": "^16.4.5",
         "ethers": "^6.13.4",
+        "https-proxy-agent": "^7.0.6",
         "opensea-js": "^7.1.14"
     },
     "keywords": [],
