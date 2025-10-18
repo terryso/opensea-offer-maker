@@ -31,8 +31,10 @@
         "commander": "^12.1.0",
         "dotenv": "^16.4.5",
         "ethers": "^6.13.4",
+        "global-agent": "^3.0.0",
         "https-proxy-agent": "^7.0.6",
-        "opensea-js": "^7.1.14"
+        "opensea-js": "^7.1.14",
+        "undici": "^7.16.0"
     },
     "keywords": [],
     "author": "",

@@ -166,8 +166,9 @@ export class OfferStrategy {
                 }
                 
                 const bestOffer = await this.getBestOffer(params);
-                
-                if (!bestOffer || bestOffer.maker.address.toLowerCase() !== this.walletAddress.toLowerCase()) {
+
+                // 如果没有 offer，或者自己不是最高价之一，则创建新的 offer
+                if (!bestOffer || !bestOffer.iAmTopBidder) {
                     const newUnitPrice = await this.calculateNewOfferPrice(bestOffer?.price, params.collectionSlug);
                     
                     if (!newUnitPrice) {
@@ -222,8 +223,10 @@ export class OfferStrategy {
                     }
 
                     return result;
+                } else {
+                    logger.info('Already among top bidders, skipping offer creation');
                 }
-                
+
                 return null;
             } catch (error) {
                 logger.error('Error in offer creation process:', error);
@@ -242,32 +245,45 @@ export class OfferStrategy {
 
             if (offerType === 'collection') {
                 offers = await this.openSeaApi.getCollectionOffers(params.collectionSlug);
-                
+
                 if (!offers?.offers?.length) {
                     return null;
                 }
 
-                const bestOffer = offers.offers.reduce((best, current) => {
-                    const currentQuantity = parseInt(current.protocol_data.parameters.consideration[0].startAmount) || 1;
-                    const currentValue = BigInt(current.price.value);
-                    const currentUnitValue = currentValue / BigInt(currentQuantity);
-                    
-                    if (!best) return current;
-                    
-                    const bestQuantity = parseInt(best.protocol_data.parameters.consideration[0].startAmount) || 1;
-                    const bestValue = BigInt(best.price.value);
-                    const bestUnitValue = bestValue / BigInt(bestQuantity);
+                // 首先找出最高单价
+                let highestUnitPrice = BigInt(0);
+                for (const offer of offers.offers) {
+                    const quantity = parseInt(offer.protocol_data.parameters.consideration[0].startAmount) || 1;
+                    const value = BigInt(offer.price.value);
+                    const unitValue = value / BigInt(quantity);
 
-                    if (currentUnitValue > bestUnitValue) return current;
-                    if (currentUnitValue === bestUnitValue && currentQuantity > bestQuantity) return current;
-                    return best;
-                }, null);
+                    if (unitValue > highestUnitPrice) {
+                        highestUnitPrice = unitValue;
+                    }
+                }
+
+                // 找出所有最高价的 offers
+                const topOffers = offers.offers.filter(offer => {
+                    const quantity = parseInt(offer.protocol_data.parameters.consideration[0].startAmount) || 1;
+                    const value = BigInt(offer.price.value);
+                    const unitValue = value / BigInt(quantity);
+                    return unitValue === highestUnitPrice;
+                });
+
+                // 检查自己是否在最高价的 offers 中
+                const iAmTopBidder = topOffers.some(offer =>
+                    offer.protocol_data.parameters.offerer.toLowerCase() === this.walletAddress.toLowerCase()
+                );
+
+                // 选择一个代表性的最高价 offer（用于计算新价格）
+                const bestOffer = topOffers[0];
 
                 logger.debug('Best collection offer found:', {
                     quantity: bestOffer.protocol_data.parameters.consideration[0].startAmount,
                     unitPrice: ethers.formatEther(BigInt(bestOffer.price.value) / BigInt(bestOffer.protocol_data.parameters.consideration[0].startAmount)),
                     maker: bestOffer.protocol_data.parameters.offerer,
-                    myself: bestOffer.protocol_data.parameters.offerer.toLowerCase() === this.walletAddress.toLowerCase()
+                    topBiddersCount: topOffers.length,
+                    iAmTopBidder: iAmTopBidder
                 });
 
                 return {
@@ -277,24 +293,26 @@ export class OfferStrategy {
                     price: {
                         value: bestOffer.price.value,
                         quantity: bestOffer.protocol_data.parameters.consideration[0].startAmount
-                    }
+                    },
+                    iAmTopBidder: iAmTopBidder
                 };
             } else {
                 // 获取单个 token 的最佳 offer
                 const bestOffer = await this.openSeaApi.getBestNFTOffer(params.collectionSlug, params.tokenId);
-                
+
                 if (!bestOffer) {
                     logger.debug('No NFT offers found');
                     return null;
                 }
 
                 const quantity = bestOffer.protocol_data.parameters.consideration[0].startAmount || '1';
+                const iAmTopBidder = bestOffer.protocol_data.parameters.offerer.toLowerCase() === this.walletAddress.toLowerCase();
 
                 logger.debug('Best token offer found:', {
                     totalPrice: ethers.formatEther(bestOffer.price.value),
                     quantity: quantity,
                     maker: bestOffer.protocol_data.parameters.offerer,
-                    myself: bestOffer.protocol_data.parameters.offerer.toLowerCase() === this.walletAddress.toLowerCase()
+                    iAmTopBidder: iAmTopBidder
                 });
 
                 return {
@@ -304,7 +322,8 @@ export class OfferStrategy {
                     price: {
                         value: bestOffer.price.value,
                         quantity: quantity
-                    }
+                    },
+                    iAmTopBidder: iAmTopBidder
                 };
             }
         } catch (error) {
