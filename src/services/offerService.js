@@ -96,6 +96,7 @@ export class OfferService {
                 amount: offerAmount,
                 expirationTime: Math.floor(Date.now() / 1000) + (expirationMinutes * 60),
                 paymentTokenAddress: this.chainConfig.wethAddress,
+                excludeOptionalCreatorFees: true,
                 traitType,
                 traitValue,
             });
@@ -136,6 +137,7 @@ export class OfferService {
             startAmount: offerAmount,
             expirationTime: Math.floor(Date.now() / 1000) + (expirationMinutes * 60),
             paymentTokenAddress: wethContract.address,
+            excludeOptionalCreatorFees: true,
         });
 
         console.log(`Successfully created an individual NFT offer with orderHash: ${response.orderHash}`);
