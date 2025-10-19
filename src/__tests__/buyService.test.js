@@ -1,0 +1,556 @@
+/**
+ * @jest-environment node
+ */
+
+import { jest } from '@jest/globals';
+import {
+    validatePrice,
+    checkSufficientBalance,
+    buySpecificNFT,
+    buyFloorNFT,
+    estimateGasFee
+} from '../services/buyService.js';
+import { ethers } from 'ethers';
+
+describe('BuyService', () => {
+    describe('validatePrice', () => {
+        it('should not throw when actual price is less than max price', () => {
+            expect(() => validatePrice(1.0, 2.0)).not.toThrow();
+        });
+
+        it('should not throw when actual price equals max price', () => {
+            expect(() => validatePrice(1.0, 1.0)).not.toThrow();
+        });
+
+        it('should throw when actual price exceeds max price', () => {
+            expect(() => validatePrice(2.0, 1.0)).toThrow('Price 2 ETH exceeds maximum acceptable price 1 ETH');
+        });
+
+        it('should handle decimal prices correctly', () => {
+            expect(() => validatePrice(0.05, 0.1)).not.toThrow();
+            expect(() => validatePrice(0.15, 0.1)).toThrow();
+        });
+
+        it('should handle very small price differences', () => {
+            expect(() => validatePrice(0.001, 0.002)).not.toThrow();
+            expect(() => validatePrice(0.002, 0.001)).toThrow();
+        });
+
+        it('should handle string max price parameter', () => {
+            expect(() => validatePrice(1.0, '2.0')).not.toThrow();
+            expect(() => validatePrice(2.0, '1.0')).toThrow();
+        });
+    });
+
+    describe('checkSufficientBalance', () => {
+        let mockWallet;
+
+        beforeEach(() => {
+            mockWallet = {
+                address: '0x1234567890123456789012345678901234567890',
+                provider: {
+                    getBalance: jest.fn()
+                }
+            };
+        });
+
+        it('should not throw when balance is sufficient', async () => {
+            // 2 ETH balance, need 1 ETH + (0.001 * 1.2) gas = 1.0012 ETH
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('2.0'));
+
+            await expect(checkSufficientBalance(mockWallet, 1.0, 0.001)).resolves.not.toThrow();
+        });
+
+        it('should throw when balance is insufficient', async () => {
+            // 0.5 ETH balance, need 1 ETH + (0.001 * 1.2) gas = 1.0012 ETH
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('0.5'));
+
+            await expect(checkSufficientBalance(mockWallet, 1.0, 0.001))
+                .rejects.toThrow('Insufficient balance');
+        });
+
+        it('should account for gas with 20% buffer in calculation', async () => {
+            // 1.001 ETH balance, need 1 ETH + (0.002 * 1.2) gas = 1.0024 ETH
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('1.001'));
+
+            await expect(checkSufficientBalance(mockWallet, 1.0, 0.002))
+                .rejects.toThrow('Insufficient balance');
+        });
+
+        it('should pass when balance exactly covers required amount + gas with buffer', async () => {
+            // 1.0012 ETH balance, need 1 ETH + (0.001 * 1.2) gas = 1.0012 ETH
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('1.0012'));
+
+            await expect(checkSufficientBalance(mockWallet, 1.0, 0.001)).resolves.not.toThrow();
+        });
+
+        it('should handle very small required amounts', async () => {
+            // 0.002 ETH balance, need 0.001 ETH + (0.0001 * 1.2) gas = 0.00112 ETH
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('0.002'));
+
+            await expect(checkSufficientBalance(mockWallet, 0.001, 0.0001)).resolves.not.toThrow();
+        });
+
+        it('should throw with correct error message showing balance and required', async () => {
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('0.5'));
+
+            await expect(checkSufficientBalance(mockWallet, 1.0, 0.001))
+                .rejects.toThrow(/0\.5 ETH < .* ETH/);
+        });
+    });
+
+    describe('Floor NFT selection logic', () => {
+        it('should select the last NFT from cheapest batch', () => {
+            // 模拟地板NFT选择逻辑 - 使用与实际 OpenSea API 返回相同的数据结构
+            const mockListings = [
+                { price: { current: { value: ethers.parseEther('1.0').toString() } } },
+                { price: { current: { value: ethers.parseEther('1.0').toString() } } },
+                { price: { current: { value: ethers.parseEther('1.0').toString() } } },
+                { price: { current: { value: ethers.parseEther('1.5').toString() } } },
+                { price: { current: { value: ethers.parseEther('2.0').toString() } } },
+            ];
+
+            // 找出最低价格
+            const prices = mockListings.map(l => parseFloat(ethers.formatEther(l.price.current.value)));
+            const minPrice = Math.min(...prices);
+
+            // 过滤出最便宜的那批
+            const cheapestListings = mockListings.filter((l, index) => {
+                const price = parseFloat(ethers.formatEther(l.price.current.value));
+                return price === minPrice;
+            });
+
+            // 选择排序靠后的那个
+            const selectedListing = cheapestListings[cheapestListings.length - 1];
+
+            expect(cheapestListings.length).toBe(3);
+            expect(selectedListing).toBe(mockListings[2]);
+        });
+
+        it('should select the only NFT when there is one at floor price', () => {
+            const mockListings = [
+                { price: { current: { value: ethers.parseEther('1.0').toString() } } },
+                { price: { current: { value: ethers.parseEther('1.5').toString() } } },
+                { price: { current: { value: ethers.parseEther('2.0').toString() } } },
+            ];
+
+            const prices = mockListings.map(l => parseFloat(ethers.formatEther(l.price.current.value)));
+            const minPrice = Math.min(...prices);
+            const cheapestListings = mockListings.filter(l => {
+                const price = parseFloat(ethers.formatEther(l.price.current.value));
+                return price === minPrice;
+            });
+            const selectedListing = cheapestListings[cheapestListings.length - 1];
+
+            expect(cheapestListings.length).toBe(1);
+            expect(selectedListing).toBe(mockListings[0]);
+        });
+
+        it('should handle all listings at the same price', () => {
+            const mockListings = [
+                { price: { current: { value: ethers.parseEther('1.0').toString() } } },
+                { price: { current: { value: ethers.parseEther('1.0').toString() } } },
+                { price: { current: { value: ethers.parseEther('1.0').toString() } } },
+            ];
+
+            const prices = mockListings.map(l => parseFloat(ethers.formatEther(l.price.current.value)));
+            const minPrice = Math.min(...prices);
+            const cheapestListings = mockListings.filter(l => {
+                const price = parseFloat(ethers.formatEther(l.price.current.value));
+                return price === minPrice;
+            });
+            const selectedListing = cheapestListings[cheapestListings.length - 1];
+
+            expect(cheapestListings.length).toBe(3);
+            expect(selectedListing).toBe(mockListings[2]);
+        });
+    });
+
+    describe('estimateGasFee', () => {
+        let mockProvider;
+
+        beforeEach(() => {
+            mockProvider = {
+                getFeeData: jest.fn()
+            };
+        });
+
+        it('should estimate gas fee correctly', async () => {
+            const mockFeeData = {
+                maxFeePerGas: ethers.parseUnits('2', 'gwei'),
+                gasPrice: ethers.parseUnits('1', 'gwei')
+            };
+            mockProvider.getFeeData.mockResolvedValue(mockFeeData);
+
+            const estimatedGas = await estimateGasFee(mockProvider);
+
+            expect(estimatedGas).toBeGreaterThan(0);
+            expect(typeof estimatedGas).toBe('number');
+        });
+
+        it('should return default value on error', async () => {
+            mockProvider.getFeeData.mockRejectedValue(new Error('Network error'));
+
+            const estimatedGas = await estimateGasFee(mockProvider);
+
+            expect(estimatedGas).toBe(0.002);
+        });
+
+        it('should handle legacy gas price', async () => {
+            const mockFeeData = {
+                maxFeePerGas: null,
+                gasPrice: ethers.parseUnits('1.5', 'gwei')
+            };
+            mockProvider.getFeeData.mockResolvedValue(mockFeeData);
+
+            const estimatedGas = await estimateGasFee(mockProvider);
+
+            expect(estimatedGas).toBeGreaterThan(0);
+        });
+    });
+
+    describe('buySpecificNFT', () => {
+        let mockSdk, mockWallet, mockOpenseaApi, mockOptions;
+
+        beforeEach(() => {
+            mockSdk = {
+                fulfillOrder: jest.fn()
+            };
+
+            mockWallet = {
+                address: '0x1234567890123456789012345678901234567890',
+                provider: {
+                    getBalance: jest.fn(),
+                    getFeeData: jest.fn()
+                },
+                getAddress: jest.fn()
+            };
+
+            mockOpenseaApi = {
+                getListingByTokenId: jest.fn()
+            };
+
+            mockOptions = {
+                skipConfirm: true
+            };
+
+            // Setup default mocks
+            mockWallet.getAddress.mockResolvedValue('0x1234567890123456789012345678901234567890');
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('10.0'));
+            mockWallet.provider.getFeeData.mockResolvedValue({
+                maxFeePerGas: ethers.parseUnits('1', 'gwei'),
+                gasPrice: ethers.parseUnits('1', 'gwei')
+            });
+        });
+
+        it('should successfully buy a specific NFT', async () => {
+            const mockListing = {
+                price: {
+                    current: {
+                        value: ethers.parseEther('1.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSellerAddress'
+                    }
+                },
+                order: { /* order data */ }
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            const result = await buySpecificNFT(
+                mockSdk,
+                '0xContractAddress',
+                '123',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            expect(result).toBe('0xtxhash');
+            expect(mockSdk.fulfillOrder).toHaveBeenCalled();
+        });
+
+        it('should throw error when no listing found', async () => {
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(null);
+
+            await expect(
+                buySpecificNFT(
+                    mockSdk,
+                    '0xContractAddress',
+                    '123',
+                    mockWallet,
+                    mockOpenseaApi,
+                    mockOptions
+                )
+            ).rejects.toThrow('No active listing found');
+        });
+
+        it('should throw error when price exceeds max price', async () => {
+            const mockListing = {
+                price: {
+                    current: {
+                        value: ethers.parseEther('2.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSellerAddress'
+                    }
+                }
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockOptions.maxPrice = 1.0;
+
+            await expect(
+                buySpecificNFT(
+                    mockSdk,
+                    '0xContractAddress',
+                    '123',
+                    mockWallet,
+                    mockOpenseaApi,
+                    mockOptions
+                )
+            ).rejects.toThrow('exceeds maximum acceptable price');
+        });
+
+        it('should throw error when balance is insufficient', async () => {
+            const mockListing = {
+                price: {
+                    current: {
+                        value: ethers.parseEther('5.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSellerAddress'
+                    }
+                }
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('1.0'));
+
+            await expect(
+                buySpecificNFT(
+                    mockSdk,
+                    '0xContractAddress',
+                    '123',
+                    mockWallet,
+                    mockOpenseaApi,
+                    mockOptions
+                )
+            ).rejects.toThrow('Insufficient balance');
+        });
+    });
+
+    describe('buyFloorNFT', () => {
+        let mockSdk, mockWallet, mockOpenseaApi, mockOptions;
+
+        beforeEach(() => {
+            mockSdk = {
+                fulfillOrder: jest.fn()
+            };
+
+            mockWallet = {
+                address: '0x1234567890123456789012345678901234567890',
+                provider: {
+                    getBalance: jest.fn(),
+                    getFeeData: jest.fn()
+                },
+                getAddress: jest.fn()
+            };
+
+            mockOpenseaApi = {
+                getBestListings: jest.fn()
+            };
+
+            mockOptions = {
+                skipConfirm: true
+            };
+
+            // Setup default mocks
+            mockWallet.getAddress.mockResolvedValue('0x1234567890123456789012345678901234567890');
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('10.0'));
+            mockWallet.provider.getFeeData.mockResolvedValue({
+                maxFeePerGas: ethers.parseUnits('1', 'gwei'),
+                gasPrice: ethers.parseUnits('1', 'gwei')
+            });
+        });
+
+        it('should successfully buy floor NFT', async () => {
+            const mockListings = [
+                {
+                    price: {
+                        current: {
+                            value: ethers.parseEther('1.0').toString()
+                        }
+                    },
+                    protocol_data: {
+                        parameters: {
+                            offerer: '0xSeller1',
+                            offer: [{
+                                token: '0xContractAddress',
+                                identifierOrCriteria: '123'
+                            }]
+                        }
+                    },
+                    order: {}
+                },
+                {
+                    price: {
+                        current: {
+                            value: ethers.parseEther('1.5').toString()
+                        }
+                    },
+                    protocol_data: {
+                        parameters: {
+                            offerer: '0xSeller2',
+                            offer: [{
+                                token: '0xContractAddress',
+                                identifierOrCriteria: '124'
+                            }]
+                        }
+                    },
+                    order: {}
+                }
+            ];
+
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: mockListings });
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            const result = await buyFloorNFT(
+                mockSdk,
+                'test-collection',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            expect(result).toBe('0xtxhash');
+            expect(mockSdk.fulfillOrder).toHaveBeenCalled();
+        });
+
+        it('should throw error when no listings found', async () => {
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: [] });
+
+            await expect(
+                buyFloorNFT(
+                    mockSdk,
+                    'test-collection',
+                    mockWallet,
+                    mockOpenseaApi,
+                    mockOptions
+                )
+            ).rejects.toThrow('No active listings found');
+        });
+
+        it('should select the last NFT from floor price batch', async () => {
+            const mockListings = [
+                {
+                    price: {
+                        current: {
+                            value: ethers.parseEther('1.0').toString()
+                        }
+                    },
+                    protocol_data: {
+                        parameters: {
+                            offerer: '0xSeller1',
+                            offer: [{
+                                token: '0xContract',
+                                identifierOrCriteria: '100'
+                            }]
+                        }
+                    },
+                    order: {}
+                },
+                {
+                    price: {
+                        current: {
+                            value: ethers.parseEther('1.0').toString()
+                        }
+                    },
+                    protocol_data: {
+                        parameters: {
+                            offerer: '0xSeller2',
+                            offer: [{
+                                token: '0xContract',
+                                identifierOrCriteria: '101'
+                            }]
+                        }
+                    },
+                    order: {}
+                },
+                {
+                    price: {
+                        current: {
+                            value: ethers.parseEther('2.0').toString()
+                        }
+                    },
+                    protocol_data: {
+                        parameters: {
+                            offerer: '0xSeller3',
+                            offer: [{
+                                token: '0xContract',
+                                identifierOrCriteria: '102'
+                            }]
+                        }
+                    },
+                    order: {}
+                }
+            ];
+
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: mockListings });
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            await buyFloorNFT(
+                mockSdk,
+                'test-collection',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            // Should select the second listing (last one at floor price)
+            const fulfillCall = mockSdk.fulfillOrder.mock.calls[0][0];
+            expect(fulfillCall.order).toBe(mockListings[1].order);
+        });
+
+        it('should throw error when floor price exceeds max price', async () => {
+            const mockListings = [{
+                price: {
+                    current: {
+                        value: ethers.parseEther('2.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSeller',
+                        offer: [{
+                            token: '0xContract',
+                            identifierOrCriteria: '123'
+                        }]
+                    }
+                },
+                order: {}
+            }];
+
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: mockListings });
+            mockOptions.maxPrice = 1.0;
+
+            await expect(
+                buyFloorNFT(
+                    mockSdk,
+                    'test-collection',
+                    mockWallet,
+                    mockOpenseaApi,
+                    mockOptions
+                )
+            ).rejects.toThrow('exceeds maximum acceptable price');
+        });
+    });
+});

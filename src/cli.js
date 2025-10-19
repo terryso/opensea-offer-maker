@@ -20,6 +20,7 @@ import {
     scanCommand,
     trendingCommand,
     listCommand,
+    buyCommand,
     swapCommand,
     sendCommand,
     keyCommand,
@@ -44,6 +45,7 @@ program
     .addCommand(scanCommand)
     .addCommand(trendingCommand)
     .addCommand(listCommand)
+    .addCommand(buyCommand)
     .addCommand(swapCommand)
     .addCommand(sendCommand)
     .addCommand(keyCommand)

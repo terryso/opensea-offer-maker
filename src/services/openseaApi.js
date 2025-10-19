@@ -245,9 +245,9 @@ export class OpenSeaApi {
             if (limit) {
                 url.searchParams.append('limit', limit.toString());
             }
-            
+
             logger.debug('Fetching best listings:', url.toString());
-            
+
             const response = await this.fetchWithRetry(url.toString(), {
                 method: 'GET',
                 headers: {
@@ -263,12 +263,15 @@ export class OpenSeaApi {
         }
     }
 
-    async getOrderStatus(orderHash) {
+    async getListingByTokenId(contractAddress, tokenId) {
         try {
-            const url = new URL(`${this.baseUrl}/api/v2/orders/${this.chainConfig.name}/seaport/${orderHash}`);
-            
-            logger.debug('Fetching order status:', url.toString());
-            
+            const url = new URL(`${this.baseUrl}/api/v2/orders/${this.chainConfig.name}/seaport/listings`);
+            url.searchParams.append('asset_contract_address', contractAddress);
+            url.searchParams.append('token_ids', tokenId);
+            url.searchParams.append('limit', '1');
+
+            logger.debug('Fetching listing by token ID:', url.toString());
+
             const response = await this.fetchWithRetry(url.toString(), {
                 method: 'GET',
                 headers: {
@@ -277,14 +280,64 @@ export class OpenSeaApi {
                 }
             });
 
+            // 返回第一个listing，如果存在的话
+            if (response && response.orders && response.orders.length > 0) {
+                const listing = response.orders[0];
+
+                // 添加价格信息以便于使用
+                if (listing.current_price) {
+                    listing.price_value = listing.current_price;
+                    listing.price = parseFloat(ethers.formatEther(listing.current_price));
+                }
+
+                return listing;
+            }
+
+            return null;
+        } catch (error) {
+            logger.error('Failed to fetch listing by token ID:', error);
+            return null;
+        }
+    }
+
+    async getOrderStatus(orderHash) {
+        try {
+            const url = new URL(`${this.baseUrl}/api/v2/orders/${this.chainConfig.name}/seaport/${orderHash}`);
+
+            logger.debug('Fetching order status:', url.toString());
+
+            const response = await this.axiosInstance({
+                url: url.toString(),
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
             return {
-                fulfilled: response.order_status === 'fulfilled',
-                status: response.order_status,
-                ...response
+                fulfilled: response.data.order_status === 'fulfilled',
+                status: response.data.order_status,
+                ...response.data
             };
         } catch (error) {
-            logger.error('Failed to fetch order status:', error);
-            throw error;
+            // 404 表示订单不存在（可能已过期或被取消）
+            if (error.response?.status === 404) {
+                logger.warn(`Order ${orderHash} not found (expired or cancelled)`);
+                return {
+                    fulfilled: false,
+                    status: 'not_found',
+                    expired: true
+                };
+            }
+
+            logger.error('Failed to fetch order status:', error.message);
+            // 其他错误也返回默认状态，避免程序中断
+            return {
+                fulfilled: false,
+                status: 'error',
+                error: error.message
+            };
         }
     }
 
@@ -293,9 +346,7 @@ export class OpenSeaApi {
         
         try {
             logger.info('Building listing order with Seaport.js...');
-            
-            const provider = wallet.provider;
-            
+
             // 创建 Seaport 实例
             const seaport = new Seaport(wallet);
             

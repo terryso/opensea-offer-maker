@@ -128,12 +128,24 @@ export class OfferStrategy {
 
         try {
             const orderStatus = await this.openSeaApi.getOrderStatus(this.lastOrderHash);
+
+            // 如果订单已经过期或不存在，清除记录
+            if (orderStatus.expired || orderStatus.status === 'not_found') {
+                logger.info('Previous offer expired or not found, clearing record', {
+                    orderHash: this.lastOrderHash,
+                    status: orderStatus.status
+                });
+                this.lastOrderHash = null;
+                return false;
+            }
+
             if (orderStatus.fulfilled) {
                 logger.info('Previous offer was accepted!', {
                     orderHash: this.lastOrderHash
                 });
                 return true;
             }
+
             return false;
         } catch (error) {
             logger.error('Failed to check order status:', error);

@@ -4,6 +4,7 @@ export { checkOffersCommand } from './checkOffersCommand.js';
 export { scanCommand } from './scanCommand.js';
 export { trendingCommand } from './trendingCommand.js';
 export { listCommand } from './listCommand.js';
+export { buyCommand } from './buyCommand.js';
 export { swapCommand } from './swapCommand.js';
 export { sendCommand } from './sendCommand.js';
 export { keyCommand } from './keyCommand.js';

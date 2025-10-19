@@ -204,9 +204,28 @@ describe('OpenSeaApi', () => {
         it('should handle API errors', async () => {
             mockAxiosInstance.mockRejectedValue(new Error('API Error'));
 
-            await expect(api.getOrderStatus('order-hash'))
-                .rejects
-                .toThrow('API Error');
+            const result = await api.getOrderStatus('order-hash');
+            expect(result).toEqual({
+                fulfilled: false,
+                status: 'error',
+                error: 'API Error'
+            });
+        });
+
+        it('should handle 404 errors (expired orders)', async () => {
+            mockAxiosInstance.mockRejectedValue({
+                response: {
+                    status: 404,
+                    data: 'Not found'
+                }
+            });
+
+            const result = await api.getOrderStatus('order-hash');
+            expect(result).toEqual({
+                fulfilled: false,
+                status: 'not_found',
+                expired: true
+            });
         });
     });
 
