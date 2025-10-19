@@ -41,7 +41,7 @@ describe('listCommand', () => {
         const marketplacesOption = listCommand.options.find(opt => opt.flags.includes('--marketplaces'));
 
         expect(expirationOption.defaultValue).toBe('1h');
-        expect(marketplacesOption.defaultValue).toBe('opensea,blur');
+        expect(marketplacesOption.defaultValue).toBe('opensea');
     });
 
     it('should have an action function', () => {

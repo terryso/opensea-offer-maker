@@ -54,7 +54,7 @@ export const RESERVOIR_API_BASE_URLS = {
 
 // Supported marketplaces
 export const SUPPORTED_MARKETPLACES = {
-    ethereum: ['opensea', 'blur'],
+    ethereum: ['opensea'],
     base: ['opensea'],
     sepolia: ['opensea']
 };

@@ -22,7 +22,6 @@
 | `client.actions.listToken()` | `sdk.createListing()` | ✅ |
 
 **已知限制:**
-- ⚠️ Blur marketplace 暂不支持 (需要单独的 Blur SDK)
 - ✅ OpenSea listing 完全支持
 
 **测试建议:**
@@ -161,7 +160,6 @@ async getCollectionByContract(contractAddress) {
 - ✅ 地板价获取和计算
 
 ### 待解决:
-- 🔄 Blur marketplace 支持
 - 🔄 Top collections 数据源
 - 🔄 Trending collections 数据源
 

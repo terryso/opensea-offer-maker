@@ -105,7 +105,7 @@ sequenceDiagram
     Note over ScanService: 共找到 11 个机会
 
     ScanService-->>CLI: 返回 11 个机会
-    CLI->>User: 显示结果，包含 OpenSea/Blur/Reservoir 链接
+    CLI->>User: 显示结果，包含 OpenSea/Reservoir 链接
 ```
 
 ---

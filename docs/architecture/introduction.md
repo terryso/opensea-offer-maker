@@ -46,7 +46,7 @@
 - `checkOffersCommand.js` - 查询出价和统计数据
 - `scanCommand.js` - Top 集合扫描
 - `trendingCommand.js` - 热门集合
-- `listCommand.js` - 跨市场挂单（OpenSea + Blur）
+- `listCommand.js` - OpenSea 挂单
 - `swapCommand.js` - ETH/WETH 兑换
 - `sendCommand.js` - 代币转账
 - `keyCommand.js` - 私钥管理（6 个子命令）

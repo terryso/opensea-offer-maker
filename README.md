@@ -155,7 +155,7 @@ Select NFTs from your cached wallet NFTs with an interactive interface:
 
 ```bash
 # Interactive NFT selection from cache
-node src/cli.js list --interactive -p 0.1 --marketplaces opensea,blur
+node src/cli.js list --interactive -p 0.1
 
 # Interactive with floor price difference
 node src/cli.js list --interactive --floor-diff +10%
@@ -173,19 +173,18 @@ node src/cli.js list --interactive --profit-percent 15 --marketplaces opensea
 Specify contract address and token ID directly:
 
 ```bash
-# List NFT on multiple marketplaces
-node src/cli.js list -a contract_address -t token_id -p 0.1 --marketplaces opensea,blur
+# List NFT on OpenSea
+node src/cli.js list -a contract_address -t token_id -p 0.1
 
 # List with floor price difference
 node src/cli.js list -a contract_address -t token_id --floor-diff +10% --marketplaces all
 
 # List with specific expiration
-node src/cli.js list -a contract_address -t token_id -p 0.1 -e 7d --marketplaces opensea,blur
+node src/cli.js list -a contract_address -t token_id -p 0.1 -e 7d
 ```
 
-Supported marketplaces:
+Supported marketplace:
 - OpenSea
-- Blur (Ethereum only)
 
 ## Examples
 

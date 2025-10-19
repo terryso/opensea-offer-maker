@@ -17,7 +17,7 @@ export const listCommand = new Command('list')
     .option('--profit-margin <margin>', 'Profit margin over last purchase price (e.g., 0.01 for +0.01 ETH)')
     .option('--profit-percent <percent>', 'Profit percentage over last purchase price (e.g., 10 for +10%)')
     .option('-e, --expiration <time>', 'Expiration time (e.g., 30d, 12h, 45m)', '1h')
-    .option('-m, --marketplaces <markets>', 'Comma-separated list of marketplaces (opensea,blur)', 'opensea,blur')
+    .option('-m, --marketplaces <markets>', 'Comma-separated list of marketplaces (only opensea supported)', 'opensea')
     .option('--skip-confirm', 'Skip listing confirmation')
     .option('--debug', 'Enable debug logging');
 
@@ -99,16 +99,11 @@ listCommand.action(async (options) => {
         }
 
         // Validate marketplace list
-        const validMarketplaces = ['opensea', 'blur'];
+        const validMarketplaces = ['opensea'];
         const marketplaces = options.marketplaces.toLowerCase().split(',');
         const invalidMarkets = marketplaces.filter(m => !validMarketplaces.includes(m));
         if (invalidMarkets.length > 0) {
-            throw new Error(`Invalid marketplaces: ${invalidMarkets.join(', ')}`);
-        }
-
-        // Blur marketplace only available on Ethereum mainnet
-        if (chainConfig.chain !== 'ethereum' && marketplaces.includes('blur')) {
-            throw new Error('Blur marketplace is only available on Ethereum mainnet');
+            throw new Error(`Invalid marketplaces: ${invalidMarkets.join(', ')}. Only OpenSea is supported.`);
         }
 
         // Check pricing parameters
@@ -239,13 +234,6 @@ listCommand.action(async (options) => {
                 wallet: walletAddress,
                 chain: chainConfig.name
             });
-        }
-
-        // Note: Currently only supports OpenSea
-        // Blur requires separate API integration
-        if (marketplaces.includes('blur')) {
-            logger.warn('⚠️  Warning: Blur listing is not yet supported in this version.');
-            logger.warn('    Only OpenSea listing will be created.');
         }
 
         logger.info('Creating OpenSea listing...');

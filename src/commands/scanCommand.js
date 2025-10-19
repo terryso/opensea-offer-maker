@@ -59,9 +59,6 @@ scanCommand.action(async (options) => {
             logger.info(`Est. 24h Sales: ${opp.estimatedSales.toFixed(2)}`);
             logger.info(`OpenSea: ${opp.openseaUrl}`);
             logger.info(`Reservoir: ${opp.reservoirUrl}`);
-            if (opp.blurUrl) {
-                logger.info(`Blur: ${opp.blurUrl}`);
-            }
         });
 
     } catch (error) {

@@ -247,7 +247,6 @@ const counter = await seaportContract.getCounter(walletAddress);
 | 创建 listing | ✅ | ✅ |
 | 代理支持 | ❌ | ✅ |
 | 超时问题 | ❌ 经常超时 | ✅ 已解决 |
-| Blur 支持 | ✅ | ❌ (待实现) |
 | 代码复杂度 | 高 (viem + SDK) | 中 (直接 API) |
 | 调试难度 | 高 | 低 |
 
@@ -268,7 +267,7 @@ const counter = await seaportContract.getCounter(walletAddress);
    - 支持一次创建多个 listing
    - 提高效率
 
-3. **Blur 集成**
+3. **多市场支持**
    - 研究 Blur API
    - 实现 Blur listing 功能
 

@@ -198,49 +198,6 @@ describe('ScanService', () => {
             expect(result[0].slug).toBe('high-sales');
         });
 
-        it('should include blurUrl when provided', async () => {
-            const collections = [
-                {
-                    name: 'With Blur',
-                    slug: 'with-blur',
-                    stats: {
-                        volume24h: 100,
-                        floorPrice: 1.0,
-                        topBid: 0.8,
-                        estimatedSales: 100
-                    },
-                    openseaUrl: 'https://opensea.io/collection/with-blur',
-                    reservoirUrl: 'https://reservoir.tools/with-blur',
-                    blurUrl: 'https://blur.io/collection/with-blur'
-                }
-            ];
-
-            const result = await scanService._processCollections(collections, 0, 0, 0);
-            expect(result).toHaveLength(1);
-            expect(result[0]).toHaveProperty('blurUrl');
-            expect(result[0].blurUrl).toBe('https://blur.io/collection/with-blur');
-        });
-
-        it('should not include blurUrl when not provided', async () => {
-            const collections = [
-                {
-                    name: 'Without Blur',
-                    slug: 'without-blur',
-                    stats: {
-                        volume24h: 100,
-                        floorPrice: 1.0,
-                        topBid: 0.8,
-                        estimatedSales: 100
-                    },
-                    openseaUrl: 'https://opensea.io/collection/without-blur',
-                    reservoirUrl: 'https://reservoir.tools/without-blur'
-                }
-            ];
-
-            const result = await scanService._processCollections(collections, 0, 0, 0);
-            expect(result).toHaveLength(1);
-            expect(result[0]).not.toHaveProperty('blurUrl');
-        });
 
         it('should handle errors gracefully and continue processing', async () => {
             const collections = [
