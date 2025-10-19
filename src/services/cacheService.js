@@ -6,7 +6,6 @@ const DEFAULT_CACHE_EXPIRY_HOURS = 24;
 const CACHE_BASE_DIR = '.cache';
 const NFTS_DIR = 'nfts';
 const FILTERS_DIR = 'filters';
-const FILTER_FILE = 'ignored_collections.json';
 
 export class CacheService {
     constructor() {
@@ -15,7 +14,6 @@ export class CacheService {
         this.baseDir = CACHE_BASE_DIR;
         this.nftsDir = path.join(this.baseDir, NFTS_DIR);
         this.filtersDir = path.join(this.baseDir, FILTERS_DIR);
-        this.filterFile = path.join(this.filtersDir, FILTER_FILE);
     }
 
     /**
@@ -41,6 +39,20 @@ export class CacheService {
     }
 
     /**
+     * Get filter file path for chain
+     */
+    _getFilterFilePath(chain) {
+        return path.join(this.filtersDir, `ignored_collections_${chain}.json`);
+    }
+
+    /**
+     * Get whitelist file path for chain
+     */
+    _getWhitelistFilePath(chain) {
+        return path.join(this.filtersDir, `whitelisted_collections_${chain}.json`);
+    }
+
+    /**
      * Check if cache is expired
      */
     _isCacheExpired(timestamp) {
@@ -50,42 +62,45 @@ export class CacheService {
     }
 
     /**
-     * Load ignored collections filter
+     * Load ignored collections filter for a specific chain
      */
-    async loadIgnoredCollections() {
+    async loadIgnoredCollections(chain) {
         try {
             await this._ensureDirectories();
-            const content = await fs.readFile(this.filterFile, 'utf-8');
+            const filterFile = this._getFilterFilePath(chain);
+            const content = await fs.readFile(filterFile, 'utf-8');
             const filterData = JSON.parse(content);
             return filterData.ignoredCollections || [];
         } catch (error) {
             if (error.code === 'ENOENT') {
-                logger.debug('Ignored collections file not found, returning empty list');
+                logger.debug(`Ignored collections file not found for chain ${chain}, returning empty list`);
                 return [];
             }
-            logger.error('Failed to load ignored collections:', error);
+            logger.error(`Failed to load ignored collections for chain ${chain}:`, error);
             // Return empty array on JSON parse error to prevent crashes
             return [];
         }
     }
 
     /**
-     * Save ignored collections filter
+     * Save ignored collections filter for a specific chain
      */
-    async saveIgnoredCollections(ignoredCollections) {
+    async saveIgnoredCollections(chain, ignoredCollections) {
         try {
             await this._ensureDirectories();
             const filterData = {
                 metadata: {
                     timestamp: Date.now(),
-                    version: "1.0"
+                    version: "1.0",
+                    chain
                 },
                 ignoredCollections
             };
-            await fs.writeFile(this.filterFile, JSON.stringify(filterData, null, 2));
-            logger.debug('Ignored collections saved');
+            const filterFile = this._getFilterFilePath(chain);
+            await fs.writeFile(filterFile, JSON.stringify(filterData, null, 2));
+            logger.debug(`Ignored collections saved for chain ${chain}`);
         } catch (error) {
-            logger.error('Failed to save ignored collections:', error);
+            logger.error(`Failed to save ignored collections for chain ${chain}:`, error);
             throw error;
         }
     }
@@ -93,13 +108,13 @@ export class CacheService {
     /**
      * Add collection to ignore list
      */
-    async addIgnoredCollection(collectionSlug, reason = '用户指定：无价值') {
-        const ignoredCollections = await this.loadIgnoredCollections();
+    async addIgnoredCollection(chain, collectionSlug, reason = '用户指定：无价值') {
+        const ignoredCollections = await this.loadIgnoredCollections(chain);
 
         // Check if already exists
         const exists = ignoredCollections.find(item => item.collectionSlug === collectionSlug);
         if (exists) {
-            logger.info(`Collection ${collectionSlug} is already in ignore list`);
+            logger.info(`Collection ${collectionSlug} is already in ignore list for chain ${chain}`);
             return false;
         }
 
@@ -109,54 +124,170 @@ export class CacheService {
             addedAt: Date.now()
         });
 
-        await this.saveIgnoredCollections(ignoredCollections);
-        logger.info(`Added collection ${collectionSlug} to ignore list`);
+        await this.saveIgnoredCollections(chain, ignoredCollections);
+        logger.info(`Added collection ${collectionSlug} to ignore list for chain ${chain}`);
         return true;
     }
 
     /**
      * Remove collection from ignore list
      */
-    async removeIgnoredCollection(collectionSlug) {
-        const ignoredCollections = await this.loadIgnoredCollections();
+    async removeIgnoredCollection(chain, collectionSlug) {
+        const ignoredCollections = await this.loadIgnoredCollections(chain);
         const initialLength = ignoredCollections.length;
 
         const filtered = ignoredCollections.filter(item => item.collectionSlug !== collectionSlug);
 
         if (filtered.length === initialLength) {
-            logger.info(`Collection ${collectionSlug} not found in ignore list`);
+            logger.info(`Collection ${collectionSlug} not found in ignore list for chain ${chain}`);
             return false;
         }
 
-        await this.saveIgnoredCollections(filtered);
-        logger.info(`Removed collection ${collectionSlug} from ignore list`);
+        await this.saveIgnoredCollections(chain, filtered);
+        logger.info(`Removed collection ${collectionSlug} from ignore list for chain ${chain}`);
         return true;
     }
 
     /**
      * Clear all ignored collections
      */
-    async clearIgnoredCollections() {
-        await this.saveIgnoredCollections([]);
-        logger.info('Cleared all ignored collections');
+    async clearIgnoredCollections(chain) {
+        await this.saveIgnoredCollections(chain, []);
+        logger.info(`Cleared all ignored collections for chain ${chain}`);
     }
 
     /**
-     * Filter NFTs by removing ignored collections
+     * Load whitelisted collections
      */
-    async _filterNFTs(nfts) {
-        const ignoredCollections = await this.loadIgnoredCollections();
-        const ignoredSlugs = new Set(ignoredCollections.map(item => item.collectionSlug));
+    async loadWhitelistedCollections(chain) {
+        try {
+            await this._ensureDirectories();
+            const whitelistFile = this._getWhitelistFilePath(chain);
+            const content = await fs.readFile(whitelistFile, 'utf-8');
+            const whitelistData = JSON.parse(content);
+            return whitelistData.whitelistedCollections || [];
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                logger.debug(`Whitelisted collections file not found for chain ${chain}, returning empty list`);
+                return [];
+            }
+            logger.error(`Failed to load whitelisted collections for chain ${chain}:`, error);
+            // Return empty array on JSON parse error to prevent crashes
+            return [];
+        }
+    }
 
-        const originalCount = nfts.length;
-        const filtered = nfts.filter(nft => !ignoredSlugs.has(nft.collectionSlug));
-        const filteredCount = originalCount - filtered.length;
+    /**
+     * Save whitelisted collections
+     */
+    async saveWhitelistedCollections(chain, whitelistedCollections) {
+        try {
+            await this._ensureDirectories();
+            const whitelistData = {
+                metadata: {
+                    timestamp: Date.now(),
+                    version: "1.0",
+                    chain
+                },
+                whitelistedCollections
+            };
+            const whitelistFile = this._getWhitelistFilePath(chain);
+            await fs.writeFile(whitelistFile, JSON.stringify(whitelistData, null, 2));
+            logger.debug(`Whitelisted collections saved for chain ${chain}`);
+        } catch (error) {
+            logger.error(`Failed to save whitelisted collections for chain ${chain}:`, error);
+            throw error;
+        }
+    }
 
-        if (filteredCount > 0) {
-            logger.debug(`Filtered out ${filteredCount} NFTs from ignored collections`);
+    /**
+     * Add collection to whitelist
+     */
+    async addWhitelistedCollection(chain, collectionSlug, reason = '用户指定：有价值') {
+        const whitelistedCollections = await this.loadWhitelistedCollections(chain);
+
+        // Check if already exists
+        const exists = whitelistedCollections.find(item => item.collectionSlug === collectionSlug);
+        if (exists) {
+            logger.info(`Collection ${collectionSlug} is already in whitelist for chain ${chain}`);
+            return false;
         }
 
-        return { filtered, filteredCount };
+        whitelistedCollections.push({
+            collectionSlug,
+            reason,
+            addedAt: Date.now()
+        });
+
+        await this.saveWhitelistedCollections(chain, whitelistedCollections);
+        logger.info(`Added collection ${collectionSlug} to whitelist for chain ${chain}`);
+        return true;
+    }
+
+    /**
+     * Remove collection from whitelist
+     */
+    async removeWhitelistedCollection(chain, collectionSlug) {
+        const whitelistedCollections = await this.loadWhitelistedCollections(chain);
+        const initialLength = whitelistedCollections.length;
+
+        const filtered = whitelistedCollections.filter(item => item.collectionSlug !== collectionSlug);
+
+        if (filtered.length === initialLength) {
+            logger.info(`Collection ${collectionSlug} not found in whitelist for chain ${chain}`);
+            return false;
+        }
+
+        await this.saveWhitelistedCollections(chain, filtered);
+        logger.info(`Removed collection ${collectionSlug} from whitelist for chain ${chain}`);
+        return true;
+    }
+
+    /**
+     * Clear all whitelisted collections
+     */
+    async clearWhitelistedCollections(chain) {
+        await this.saveWhitelistedCollections(chain, []);
+        logger.info(`Cleared all whitelisted collections for chain ${chain}`);
+    }
+
+    /**
+     * Filter NFTs by whitelist (if exists) or blacklist
+     * Priority: Whitelist > Blacklist
+     * - If whitelist is not empty, only keep NFTs in whitelist
+     * - If whitelist is empty, filter out NFTs in blacklist
+     */
+    async _filterNFTs(chain, nfts) {
+        const whitelistedCollections = await this.loadWhitelistedCollections(chain);
+        const originalCount = nfts.length;
+        let filtered;
+        let filteredCount;
+        let filterType;
+
+        // If whitelist exists and is not empty, use whitelist mode
+        if (whitelistedCollections.length > 0) {
+            const whitelistedSlugs = new Set(whitelistedCollections.map(item => item.collectionSlug));
+            filtered = nfts.filter(nft => whitelistedSlugs.has(nft.collectionSlug));
+            filteredCount = originalCount - filtered.length;
+            filterType = 'whitelist';
+
+            if (filteredCount > 0) {
+                logger.debug(`Filtered out ${filteredCount} NFTs not in whitelist (kept ${filtered.length})`);
+            }
+        } else {
+            // Use blacklist mode when whitelist is empty
+            const ignoredCollections = await this.loadIgnoredCollections(chain);
+            const ignoredSlugs = new Set(ignoredCollections.map(item => item.collectionSlug));
+            filtered = nfts.filter(nft => !ignoredSlugs.has(nft.collectionSlug));
+            filteredCount = originalCount - filtered.length;
+            filterType = 'blacklist';
+
+            if (filteredCount > 0) {
+                logger.debug(`Filtered out ${filteredCount} NFTs from ignored collections`);
+            }
+        }
+
+        return { filtered, filteredCount, filterType };
     }
 
     /**
@@ -167,7 +298,7 @@ export class CacheService {
             await this._ensureDirectories();
 
             // Filter out ignored collections
-            const { filtered: filteredNFTs, filteredCount } = await this._filterNFTs(nfts);
+            const { filtered: filteredNFTs, filteredCount } = await this._filterNFTs(chain, nfts);
 
             const cacheData = {
                 metadata: {

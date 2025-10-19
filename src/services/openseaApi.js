@@ -593,7 +593,7 @@ export class OpenSeaApi {
             } while (next);
 
             // Apply collection filtering using CacheService
-            const { filtered: filteredNFTs, filteredCount } = await this.cacheService._filterNFTs(allNFTs);
+            const { filtered: filteredNFTs, filteredCount } = await this.cacheService._filterNFTs(chain, allNFTs);
 
             if (filteredCount > 0) {
                 logger.info(`Filtered out ${filteredCount} NFTs from ignored collections`);

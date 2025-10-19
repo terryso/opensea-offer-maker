@@ -261,93 +261,223 @@ const filterCommand = cacheCommand
     .command('filter')
     .description('Manage collection filters');
 
-filterCommand
+const filterAddCommand = filterCommand
     .command('add <collection>')
     .description('Add collection to ignore list')
     .option('-r, --reason <reason>', 'Reason for ignoring', '用户指定：无价值')
-    .option('--debug', 'Enable debug logging')
-    .action(async (collection, options) => {
-        try {
-            const cacheService = new CacheService();
-            const added = await cacheService.addIgnoredCollection(collection, options.reason);
+    .option('--debug', 'Enable debug logging');
 
-            if (added) {
-                logger.info(`✅ Added "${collection}" to ignore list`);
-                logger.info(`   Reason: ${options.reason}`);
-            } else {
-                logger.info(`ℹ️  Collection "${collection}" is already in ignore list`);
-            }
+addChainOption(filterAddCommand);
 
-        } catch (error) {
-            logger.error('Failed to add collection to ignore list:', error.message);
-            process.exit(1);
+filterAddCommand.action(async (collection, options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        const added = await cacheService.addIgnoredCollection(chainConfig.name, collection, options.reason);
+
+        if (added) {
+            logger.info(`✅ Added "${collection}" to ignore list for ${chainConfig.name}`);
+            logger.info(`   Reason: ${options.reason}`);
+        } else {
+            logger.info(`ℹ️  Collection "${collection}" is already in ignore list for ${chainConfig.name}`);
         }
-    });
 
-filterCommand
+    } catch (error) {
+        logger.error('Failed to add collection to ignore list:', error.message);
+        process.exit(1);
+    }
+});
+
+const filterRemoveCommand = filterCommand
     .command('remove <collection>')
     .description('Remove collection from ignore list')
-    .option('--debug', 'Enable debug logging')
-    .action(async (collection, options) => {
-        try {
-            const cacheService = new CacheService();
-            const removed = await cacheService.removeIgnoredCollection(collection);
+    .option('--debug', 'Enable debug logging');
 
-            if (removed) {
-                logger.info(`✅ Removed "${collection}" from ignore list`);
-            } else {
-                logger.info(`ℹ️  Collection "${collection}" was not found in ignore list`);
-            }
+addChainOption(filterRemoveCommand);
 
-        } catch (error) {
-            logger.error('Failed to remove collection from ignore list:', error.message);
-            process.exit(1);
+filterRemoveCommand.action(async (collection, options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        const removed = await cacheService.removeIgnoredCollection(chainConfig.name, collection);
+
+        if (removed) {
+            logger.info(`✅ Removed "${collection}" from ignore list for ${chainConfig.name}`);
+        } else {
+            logger.info(`ℹ️  Collection "${collection}" was not found in ignore list for ${chainConfig.name}`);
         }
-    });
 
-filterCommand
+    } catch (error) {
+        logger.error('Failed to remove collection from ignore list:', error.message);
+        process.exit(1);
+    }
+});
+
+const filterListCommand = filterCommand
     .command('list')
     .description('Show ignored collections')
-    .option('--debug', 'Enable debug logging')
-    .action(async (options) => {
-        try {
-            const cacheService = new CacheService();
-            const ignoredCollections = await cacheService.loadIgnoredCollections();
+    .option('--debug', 'Enable debug logging');
 
-            if (ignoredCollections.length === 0) {
-                logger.info('No collections in ignore list');
-                return;
-            }
+addChainOption(filterListCommand);
 
-            logger.info(`\\nIgnored Collections (${ignoredCollections.length}):\\n`);
+filterListCommand.action(async (options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        const ignoredCollections = await cacheService.loadIgnoredCollections(chainConfig.name);
 
-            ignoredCollections.forEach((item, index) => {
-                logger.info(`${index + 1}. ${item.collectionSlug}`);
-                logger.info(`   Reason: ${item.reason}`);
-                logger.info(`   Added: ${new Date(item.addedAt).toLocaleString()}`);
-                logger.info('');
-            });
-
-        } catch (error) {
-            logger.error('Failed to list ignored collections:', error.message);
-            process.exit(1);
+        if (ignoredCollections.length === 0) {
+            logger.info(`No collections in ignore list for ${chainConfig.name}`);
+            return;
         }
-    });
 
-filterCommand
+        logger.info(`\\nIgnored Collections for ${chainConfig.name} (${ignoredCollections.length}):\\n`);
+
+        ignoredCollections.forEach((item, index) => {
+            logger.info(`${index + 1}. ${item.collectionSlug}`);
+            logger.info(`   Reason: ${item.reason}`);
+            logger.info(`   Added: ${new Date(item.addedAt).toLocaleString()}`);
+            logger.info('');
+        });
+
+    } catch (error) {
+        logger.error('Failed to list ignored collections:', error.message);
+        process.exit(1);
+    }
+});
+
+const filterClearCommand = filterCommand
     .command('clear')
     .description('Clear all ignored collections')
-    .option('--debug', 'Enable debug logging')
-    .action(async (options) => {
-        try {
-            const cacheService = new CacheService();
-            await cacheService.clearIgnoredCollections();
-            logger.info('✅ Cleared all ignored collections');
+    .option('--debug', 'Enable debug logging');
 
-        } catch (error) {
-            logger.error('Failed to clear ignored collections:', error.message);
-            process.exit(1);
+addChainOption(filterClearCommand);
+
+filterClearCommand.action(async (options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        await cacheService.clearIgnoredCollections(chainConfig.name);
+        logger.info(`✅ Cleared all ignored collections for ${chainConfig.name}`);
+
+    } catch (error) {
+        logger.error('Failed to clear ignored collections:', error.message);
+        process.exit(1);
+    }
+});
+
+// Whitelist management subcommands
+const whitelistCommand = cacheCommand
+    .command('whitelist')
+    .description('Manage whitelisted collections (priority over blacklist)');
+
+const whitelistAddCommand = whitelistCommand
+    .command('add <collection>')
+    .description('Add collection to whitelist')
+    .option('-r, --reason <reason>', 'Reason for whitelisting', '用户指定：有价值')
+    .option('--debug', 'Enable debug logging');
+
+addChainOption(whitelistAddCommand);
+
+whitelistAddCommand.action(async (collection, options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        const added = await cacheService.addWhitelistedCollection(chainConfig.name, collection, options.reason);
+
+        if (added) {
+            logger.info(`✅ Added "${collection}" to whitelist for ${chainConfig.name}`);
+            logger.info(`   Reason: ${options.reason}`);
+            logger.info(`\n💡 Tip: Whitelist takes priority. Only whitelisted collections will be cached.`);
+        } else {
+            logger.info(`ℹ️  Collection "${collection}" is already in whitelist for ${chainConfig.name}`);
         }
-    });
+
+    } catch (error) {
+        logger.error('Failed to add collection to whitelist:', error.message);
+        process.exit(1);
+    }
+});
+
+const whitelistRemoveCommand = whitelistCommand
+    .command('remove <collection>')
+    .description('Remove collection from whitelist')
+    .option('--debug', 'Enable debug logging');
+
+addChainOption(whitelistRemoveCommand);
+
+whitelistRemoveCommand.action(async (collection, options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        const removed = await cacheService.removeWhitelistedCollection(chainConfig.name, collection);
+
+        if (removed) {
+            logger.info(`✅ Removed "${collection}" from whitelist for ${chainConfig.name}`);
+        } else {
+            logger.info(`ℹ️  Collection "${collection}" was not found in whitelist for ${chainConfig.name}`);
+        }
+
+    } catch (error) {
+        logger.error('Failed to remove collection from whitelist:', error.message);
+        process.exit(1);
+    }
+});
+
+const whitelistListCommand = whitelistCommand
+    .command('list')
+    .description('Show whitelisted collections')
+    .option('--debug', 'Enable debug logging');
+
+addChainOption(whitelistListCommand);
+
+whitelistListCommand.action(async (options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        const whitelistedCollections = await cacheService.loadWhitelistedCollections(chainConfig.name);
+
+        if (whitelistedCollections.length === 0) {
+            logger.info(`No collections in whitelist for ${chainConfig.name}`);
+            logger.info('💡 Tip: When whitelist is empty, blacklist mode is used');
+            return;
+        }
+
+        logger.info(`\\nWhitelisted Collections for ${chainConfig.name} (${whitelistedCollections.length}):\\n`);
+        logger.info('⚠️  Whitelist mode active: Only these collections will be cached\\n');
+
+        whitelistedCollections.forEach((item, index) => {
+            logger.info(`${index + 1}. ${item.collectionSlug}`);
+            logger.info(`   Reason: ${item.reason}`);
+            logger.info(`   Added: ${new Date(item.addedAt).toLocaleString()}`);
+            logger.info('');
+        });
+
+    } catch (error) {
+        logger.error('Failed to list whitelisted collections:', error.message);
+        process.exit(1);
+    }
+});
+
+const whitelistClearCommand = whitelistCommand
+    .command('clear')
+    .description('Clear all whitelisted collections')
+    .option('--debug', 'Enable debug logging');
+
+addChainOption(whitelistClearCommand);
+
+whitelistClearCommand.action(async (options) => {
+    try {
+        const chainConfig = await getEffectiveChain(options);
+        const cacheService = new CacheService();
+        await cacheService.clearWhitelistedCollections(chainConfig.name);
+        logger.info(`✅ Cleared all whitelisted collections for ${chainConfig.name}`);
+        logger.info('💡 Tip: Switched back to blacklist mode');
+
+    } catch (error) {
+        logger.error('Failed to clear whitelisted collections:', error.message);
+        process.exit(1);
+    }
+});
 
 export default cacheCommand;

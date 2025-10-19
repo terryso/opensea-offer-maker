@@ -89,7 +89,31 @@ describe('CacheService', () => {
     });
 
     describe('_filterNFTs', () => {
-        it('should filter out ignored collections', async () => {
+        it('should use whitelist mode when whitelist is not empty', async () => {
+            const nfts = [
+                { collectionSlug: 'good-collection', name: 'Good NFT' },
+                { collectionSlug: 'bad-collection', name: 'Bad NFT' },
+                { collectionSlug: 'another-good', name: 'Another Good' }
+            ];
+
+            const whitelistData = {
+                whitelistedCollections: [
+                    { collectionSlug: 'good-collection', reason: 'test', addedAt: Date.now() }
+                ]
+            };
+
+            // First call for whitelist, second for blacklist (not used)
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify(whitelistData));
+
+            const result = await cacheService._filterNFTs(mockChain, nfts);
+
+            expect(result.filtered).toHaveLength(1);
+            expect(result.filtered[0].collectionSlug).toBe('good-collection');
+            expect(result.filteredCount).toBe(2);
+            expect(result.filterType).toBe('whitelist');
+        });
+
+        it('should use blacklist mode when whitelist is empty', async () => {
             const nfts = [
                 { collectionSlug: 'good-collection', name: 'Good NFT' },
                 { collectionSlug: 'bad-collection', name: 'Bad NFT' },
@@ -102,31 +126,61 @@ describe('CacheService', () => {
                 ]
             };
 
-            mockFs.readFile.mockResolvedValue(JSON.stringify(filterData));
+            // First call for whitelist (empty), second for blacklist
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ whitelistedCollections: [] }));
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify(filterData));
 
-            const result = await cacheService._filterNFTs(nfts);
+            const result = await cacheService._filterNFTs(mockChain, nfts);
 
             expect(result.filtered).toHaveLength(2);
             expect(result.filtered[0].collectionSlug).toBe('good-collection');
             expect(result.filtered[1].collectionSlug).toBe('another-good');
             expect(result.filteredCount).toBe(1);
+            expect(result.filterType).toBe('blacklist');
         });
 
-        it('should not filter when no ignored collections', async () => {
+        it('should not filter when no whitelist and no blacklist', async () => {
             const nfts = [
                 { collectionSlug: 'collection1', name: 'NFT1' },
                 { collectionSlug: 'collection2', name: 'NFT2' }
             ];
 
-            mockFs.readFile.mockResolvedValue(JSON.stringify({ ignoredCollections: [] }));
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ whitelistedCollections: [] }));
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ ignoredCollections: [] }));
 
-            const result = await cacheService._filterNFTs(nfts);
+            const result = await cacheService._filterNFTs(mockChain, nfts);
 
             expect(result.filtered).toHaveLength(2);
             expect(result.filteredCount).toBe(0);
+            expect(result.filterType).toBe('blacklist');
         });
 
-        it('should handle multiple ignored collections', async () => {
+        it('should handle multiple whitelisted collections', async () => {
+            const nfts = [
+                { collectionSlug: 'good-collection-1', name: 'Good NFT 1' },
+                { collectionSlug: 'good-collection-2', name: 'Good NFT 2' },
+                { collectionSlug: 'bad-collection', name: 'Bad NFT' }
+            ];
+
+            const whitelistData = {
+                whitelistedCollections: [
+                    { collectionSlug: 'good-collection-1', reason: 'test1', addedAt: Date.now() },
+                    { collectionSlug: 'good-collection-2', reason: 'test2', addedAt: Date.now() }
+                ]
+            };
+
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify(whitelistData));
+
+            const result = await cacheService._filterNFTs(mockChain, nfts);
+
+            expect(result.filtered).toHaveLength(2);
+            expect(result.filtered[0].collectionSlug).toBe('good-collection-1');
+            expect(result.filtered[1].collectionSlug).toBe('good-collection-2');
+            expect(result.filteredCount).toBe(1);
+            expect(result.filterType).toBe('whitelist');
+        });
+
+        it('should handle multiple ignored collections in blacklist mode', async () => {
             const nfts = [
                 { collectionSlug: 'good-collection', name: 'Good NFT' },
                 { collectionSlug: 'bad-collection-1', name: 'Bad NFT 1' },
@@ -140,13 +194,15 @@ describe('CacheService', () => {
                 ]
             };
 
-            mockFs.readFile.mockResolvedValue(JSON.stringify(filterData));
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ whitelistedCollections: [] }));
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify(filterData));
 
-            const result = await cacheService._filterNFTs(nfts);
+            const result = await cacheService._filterNFTs(mockChain, nfts);
 
             expect(result.filtered).toHaveLength(1);
             expect(result.filtered[0].collectionSlug).toBe('good-collection');
             expect(result.filteredCount).toBe(2);
+            expect(result.filterType).toBe('blacklist');
         });
 
         it('should handle no filter file found', async () => {
@@ -158,7 +214,7 @@ describe('CacheService', () => {
             error.code = 'ENOENT';
             mockFs.readFile.mockRejectedValue(error);
 
-            const result = await cacheService._filterNFTs(nfts);
+            const result = await cacheService._filterNFTs(mockChain, nfts);
 
             expect(result.filtered).toHaveLength(1);
             expect(result.filteredCount).toBe(0);
@@ -171,7 +227,7 @@ describe('CacheService', () => {
 
             mockFs.readFile.mockResolvedValue('invalid json');
 
-            const result = await cacheService._filterNFTs(nfts);
+            const result = await cacheService._filterNFTs(mockChain, nfts);
 
             expect(result.filtered).toHaveLength(1);
             expect(result.filteredCount).toBe(0);
@@ -188,10 +244,10 @@ describe('CacheService', () => {
 
             mockFs.readFile.mockResolvedValue(JSON.stringify(filterData));
 
-            const result = await cacheService.loadIgnoredCollections();
+            const result = await cacheService.loadIgnoredCollections(mockChain);
 
             expect(result).toEqual(filterData.ignoredCollections);
-            expect(mockFs.readFile).toHaveBeenCalledWith('.cache/filters/ignored_collections.json', 'utf-8');
+            expect(mockFs.readFile).toHaveBeenCalledWith('.cache/filters/ignored_collections_ethereum.json', 'utf-8');
         });
 
         it('should return empty array when file not found', async () => {
@@ -199,7 +255,7 @@ describe('CacheService', () => {
             error.code = 'ENOENT';
             mockFs.readFile.mockRejectedValue(error);
 
-            const result = await cacheService.loadIgnoredCollections();
+            const result = await cacheService.loadIgnoredCollections(mockChain);
 
             expect(result).toEqual([]);
         });
@@ -207,7 +263,7 @@ describe('CacheService', () => {
         it('should return empty array on JSON parse error', async () => {
             mockFs.readFile.mockResolvedValue('invalid json');
 
-            const result = await cacheService.loadIgnoredCollections();
+            const result = await cacheService.loadIgnoredCollections(mockChain);
 
             expect(result).toEqual([]);
         });
@@ -215,7 +271,7 @@ describe('CacheService', () => {
         it('should handle missing ignoredCollections property', async () => {
             mockFs.readFile.mockResolvedValue(JSON.stringify({}));
 
-            const result = await cacheService.loadIgnoredCollections();
+            const result = await cacheService.loadIgnoredCollections(mockChain);
 
             expect(result).toEqual([]);
         });
@@ -227,10 +283,10 @@ describe('CacheService', () => {
                 { collectionSlug: 'test', reason: 'test reason', addedAt: Date.now() }
             ];
 
-            await cacheService.saveIgnoredCollections(ignoredCollections);
+            await cacheService.saveIgnoredCollections(mockChain, ignoredCollections);
 
             expect(mockFs.writeFile).toHaveBeenCalledWith(
-                '.cache/filters/ignored_collections.json',
+                '.cache/filters/ignored_collections_ethereum.json',
                 expect.stringContaining('"ignoredCollections"')
             );
         });
@@ -238,7 +294,7 @@ describe('CacheService', () => {
         it('should handle save errors', async () => {
             mockFs.writeFile.mockRejectedValue(new Error('Write failed'));
 
-            await expect(cacheService.saveIgnoredCollections([])).rejects.toThrow('Write failed');
+            await expect(cacheService.saveIgnoredCollections(mockChain, [])).rejects.toThrow('Write failed');
         });
     });
 
@@ -246,7 +302,7 @@ describe('CacheService', () => {
         it('should add new collection to ignore list', async () => {
             mockFs.readFile.mockResolvedValue(JSON.stringify({ ignoredCollections: [] }));
 
-            const result = await cacheService.addIgnoredCollection('new-collection', 'test reason');
+            const result = await cacheService.addIgnoredCollection(mockChain, 'new-collection', 'test reason');
 
             expect(result).toBe(true);
             expect(mockFs.writeFile).toHaveBeenCalled();
@@ -259,7 +315,7 @@ describe('CacheService', () => {
 
             mockFs.readFile.mockResolvedValue(JSON.stringify({ ignoredCollections: existingCollections }));
 
-            const result = await cacheService.addIgnoredCollection('existing-collection');
+            const result = await cacheService.addIgnoredCollection(mockChain, 'existing-collection');
 
             expect(result).toBe(false);
             expect(mockFs.writeFile).not.toHaveBeenCalled();
@@ -268,7 +324,7 @@ describe('CacheService', () => {
         it('should use default reason', async () => {
             mockFs.readFile.mockResolvedValue(JSON.stringify({ ignoredCollections: [] }));
 
-            await cacheService.addIgnoredCollection('test-collection');
+            await cacheService.addIgnoredCollection(mockChain, 'test-collection');
 
             const writeCall = mockFs.writeFile.mock.calls[0][1];
             const data = JSON.parse(writeCall);
@@ -285,7 +341,7 @@ describe('CacheService', () => {
 
             mockFs.readFile.mockResolvedValue(JSON.stringify({ ignoredCollections: existingCollections }));
 
-            const result = await cacheService.removeIgnoredCollection('to-remove');
+            const result = await cacheService.removeIgnoredCollection(mockChain, 'to-remove');
 
             expect(result).toBe(true);
             const writeCall = mockFs.writeFile.mock.calls[0][1];
@@ -297,7 +353,7 @@ describe('CacheService', () => {
         it('should return false if collection not found for removal', async () => {
             mockFs.readFile.mockResolvedValue(JSON.stringify({ ignoredCollections: [] }));
 
-            const result = await cacheService.removeIgnoredCollection('not-found');
+            const result = await cacheService.removeIgnoredCollection(mockChain, 'not-found');
 
             expect(result).toBe(false);
             expect(mockFs.writeFile).not.toHaveBeenCalled();
@@ -306,7 +362,7 @@ describe('CacheService', () => {
 
     describe('clearIgnoredCollections', () => {
         it('should clear all ignored collections', async () => {
-            await cacheService.clearIgnoredCollections();
+            await cacheService.clearIgnoredCollections(mockChain);
 
             const writeCall = mockFs.writeFile.mock.calls[0][1];
             const data = JSON.parse(writeCall);
@@ -314,10 +370,147 @@ describe('CacheService', () => {
         });
     });
 
+    describe('loadWhitelistedCollections', () => {
+        it('should load whitelisted collections from file', async () => {
+            const whitelistData = {
+                whitelistedCollections: [
+                    { collectionSlug: 'test-collection', reason: 'test', addedAt: Date.now() }
+                ]
+            };
+
+            mockFs.readFile.mockResolvedValue(JSON.stringify(whitelistData));
+
+            const result = await cacheService.loadWhitelistedCollections(mockChain);
+
+            expect(result).toEqual(whitelistData.whitelistedCollections);
+            expect(mockFs.readFile).toHaveBeenCalledWith('.cache/filters/whitelisted_collections_ethereum.json', 'utf-8');
+        });
+
+        it('should return empty array when file not found', async () => {
+            const error = new Error('File not found');
+            error.code = 'ENOENT';
+            mockFs.readFile.mockRejectedValue(error);
+
+            const result = await cacheService.loadWhitelistedCollections(mockChain);
+
+            expect(result).toEqual([]);
+        });
+
+        it('should return empty array on JSON parse error', async () => {
+            mockFs.readFile.mockResolvedValue('invalid json');
+
+            const result = await cacheService.loadWhitelistedCollections(mockChain);
+
+            expect(result).toEqual([]);
+        });
+
+        it('should handle missing whitelistedCollections property', async () => {
+            mockFs.readFile.mockResolvedValue(JSON.stringify({}));
+
+            const result = await cacheService.loadWhitelistedCollections(mockChain);
+
+            expect(result).toEqual([]);
+        });
+    });
+
+    describe('saveWhitelistedCollections', () => {
+        it('should save whitelisted collections to file', async () => {
+            const whitelistedCollections = [
+                { collectionSlug: 'test', reason: 'test reason', addedAt: Date.now() }
+            ];
+
+            await cacheService.saveWhitelistedCollections(mockChain, whitelistedCollections);
+
+            expect(mockFs.writeFile).toHaveBeenCalledWith(
+                '.cache/filters/whitelisted_collections_ethereum.json',
+                expect.stringContaining('"whitelistedCollections"')
+            );
+        });
+
+        it('should handle save errors', async () => {
+            mockFs.writeFile.mockRejectedValue(new Error('Write failed'));
+
+            await expect(cacheService.saveWhitelistedCollections(mockChain, [])).rejects.toThrow('Write failed');
+        });
+    });
+
+    describe('addWhitelistedCollection', () => {
+        it('should add new collection to whitelist', async () => {
+            mockFs.readFile.mockResolvedValue(JSON.stringify({ whitelistedCollections: [] }));
+
+            const result = await cacheService.addWhitelistedCollection(mockChain, 'new-collection', 'test reason');
+
+            expect(result).toBe(true);
+            expect(mockFs.writeFile).toHaveBeenCalled();
+        });
+
+        it('should return false if collection already exists', async () => {
+            const existingCollections = [
+                { collectionSlug: 'existing-collection', reason: 'test', addedAt: Date.now() }
+            ];
+
+            mockFs.readFile.mockResolvedValue(JSON.stringify({ whitelistedCollections: existingCollections }));
+
+            const result = await cacheService.addWhitelistedCollection(mockChain, 'existing-collection');
+
+            expect(result).toBe(false);
+            expect(mockFs.writeFile).not.toHaveBeenCalled();
+        });
+
+        it('should use default reason', async () => {
+            mockFs.readFile.mockResolvedValue(JSON.stringify({ whitelistedCollections: [] }));
+
+            await cacheService.addWhitelistedCollection(mockChain, 'test-collection');
+
+            const writeCall = mockFs.writeFile.mock.calls[0][1];
+            const data = JSON.parse(writeCall);
+            expect(data.whitelistedCollections[0].reason).toBe('用户指定：有价值');
+        });
+    });
+
+    describe('removeWhitelistedCollection', () => {
+        it('should remove collection from whitelist', async () => {
+            const existingCollections = [
+                { collectionSlug: 'to-remove', reason: 'test', addedAt: Date.now() },
+                { collectionSlug: 'to-keep', reason: 'test', addedAt: Date.now() }
+            ];
+
+            mockFs.readFile.mockResolvedValue(JSON.stringify({ whitelistedCollections: existingCollections }));
+
+            const result = await cacheService.removeWhitelistedCollection(mockChain, 'to-remove');
+
+            expect(result).toBe(true);
+            const writeCall = mockFs.writeFile.mock.calls[0][1];
+            const data = JSON.parse(writeCall);
+            expect(data.whitelistedCollections).toHaveLength(1);
+            expect(data.whitelistedCollections[0].collectionSlug).toBe('to-keep');
+        });
+
+        it('should return false if collection not found for removal', async () => {
+            mockFs.readFile.mockResolvedValue(JSON.stringify({ whitelistedCollections: [] }));
+
+            const result = await cacheService.removeWhitelistedCollection(mockChain, 'not-found');
+
+            expect(result).toBe(false);
+            expect(mockFs.writeFile).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('clearWhitelistedCollections', () => {
+        it('should clear all whitelisted collections', async () => {
+            await cacheService.clearWhitelistedCollections(mockChain);
+
+            const writeCall = mockFs.writeFile.mock.calls[0][1];
+            const data = JSON.parse(writeCall);
+            expect(data.whitelistedCollections).toEqual([]);
+        });
+    });
+
     describe('saveCache', () => {
         beforeEach(() => {
-            // Mock readFile for _filterNFTs
-            mockFs.readFile.mockResolvedValue(JSON.stringify({ ignoredCollections: [] }));
+            // Mock readFile for _filterNFTs (whitelist first, then blacklist)
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ whitelistedCollections: [] }));
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ ignoredCollections: [] }));
         });
 
         it('should save cache data to file', async () => {
@@ -354,7 +547,10 @@ describe('CacheService', () => {
                 ]
             };
 
-            mockFs.readFile.mockResolvedValue(JSON.stringify(filterData));
+            // Reset mocks and set up for this specific test
+            mockFs.readFile.mockReset();
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify({ whitelistedCollections: [] }));
+            mockFs.readFile.mockResolvedValueOnce(JSON.stringify(filterData));
 
             const result = await cacheService.saveCache(mockWalletAddress, mockChain, nfts);
 

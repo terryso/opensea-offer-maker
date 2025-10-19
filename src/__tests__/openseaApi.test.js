@@ -502,7 +502,7 @@ describe('OpenSeaApi', () => {
 
         beforeEach(() => {
             // Setup default filter behavior
-            mockCacheService._filterNFTs.mockImplementation(async (nfts) => ({
+            mockCacheService._filterNFTs.mockImplementation(async (chain, nfts) => ({
                 filtered: nfts,
                 filteredCount: 0
             }));
@@ -530,7 +530,7 @@ describe('OpenSeaApi', () => {
                 imageUrl: 'https://example.com/1.png',
                 tokenStandard: 'erc721'
             });
-            expect(mockCacheService._filterNFTs).toHaveBeenCalledWith(expect.any(Array));
+            expect(mockCacheService._filterNFTs).toHaveBeenCalledWith('ethereum', expect.any(Array));
         });
 
         it('should handle pagination correctly', async () => {
@@ -636,7 +636,7 @@ describe('OpenSeaApi', () => {
             const result = await api.getWalletNFTs('0xwallet123');
 
             expect(result).toHaveLength(1);
-            expect(mockCacheService._filterNFTs).toHaveBeenCalledWith(expect.arrayContaining([
+            expect(mockCacheService._filterNFTs).toHaveBeenCalledWith('ethereum', expect.arrayContaining([
                 expect.objectContaining({ collectionSlug: 'test-collection' }),
                 expect.objectContaining({ collectionSlug: 'another-collection' })
             ]));
