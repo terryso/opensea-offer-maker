@@ -29,8 +29,11 @@ export const validateChain = (chainName) => {
 export const getEffectiveChain = async (options) => {
     let chainName = options.chain;
 
-    // If chain is the default value, check if user has configured a different default
-    if (chainName === DEFAULT_CHAIN) {
+    // Only use configured default if user didn't explicitly provide --chain
+    // Check process.argv to see if --chain was explicitly provided
+    const chainExplicitlyProvided = process.argv.includes('--chain');
+    
+    if (!chainExplicitlyProvided) {
         const configuredChain = await ConfigManager.getDefaultChain();
         if (configuredChain) {
             chainName = configuredChain;
