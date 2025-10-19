@@ -151,10 +151,28 @@ node src/cli.js swap -a 0.1 -d weth2eth
 ### Cross-Market Listing
 
 #### Interactive Mode (Recommended)
-Select NFTs from your cached wallet NFTs with an interactive interface:
 
+**Full Interactive Mode** - Select collection, NFT, and pricing all interactively:
 ```bash
-# Interactive NFT selection from cache
+# Complete interactive experience (recommended for beginners)
+node src/cli.js list --interactive
+
+# Or use shorthand
+node src/cli.js list -i
+```
+
+This mode provides a step-by-step guided experience:
+1. Select a collection from your wallet
+2. Choose a specific NFT from that collection
+3. Select pricing strategy and enter price
+   - Absolute price (e.g., 0.1 ETH)
+   - Floor price difference (e.g., +0.1, -5%)
+   - Profit margin (e.g., +0.01 ETH)
+   - Profit percentage (e.g., +10%)
+
+**Partial Interactive Mode** - Pre-specify pricing, only select NFT interactively:
+```bash
+# Interactive NFT selection with pre-set price
 node src/cli.js list --interactive -p 0.1
 
 # Interactive with floor price difference
