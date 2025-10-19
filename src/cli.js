@@ -17,8 +17,6 @@ import {
     offerCommand,
     autoOfferCommand,
     checkOffersCommand,
-    scanCommand,
-    trendingCommand,
     listCommand,
     buyCommand,
     swapCommand,
@@ -43,8 +41,6 @@ program
     .addCommand(offerCommand)
     .addCommand(autoOfferCommand)
     .addCommand(checkOffersCommand)
-    .addCommand(scanCommand)
-    .addCommand(trendingCommand)
     .addCommand(listCommand)
     .addCommand(buyCommand)
     .addCommand(swapCommand)
