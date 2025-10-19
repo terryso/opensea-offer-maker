@@ -4,6 +4,7 @@
 
 import { jest } from '@jest/globals';
 import { OpenSeaApi } from '../services/openseaApi.js';
+import { ethers } from 'ethers';
 
 // Mock setTimeout 来避免真实的延迟
 const originalSetTimeout = global.setTimeout;
@@ -62,6 +63,56 @@ describe('OpenSeaApi', () => {
 
             const result = await api.fetchWithRetry('https://api.test/endpoint', {});
             expect(result).toBeUndefined();
+        });
+
+        it('should return empty offers on 404 error', async () => {
+            const error = new Error('Not Found');
+            error.response = { status: 404 };
+            mockAxiosInstance.mockRejectedValue(error);
+
+            const result = await api.fetchWithRetry('https://api.test/endpoint', {}, 1, 0);
+            expect(result).toEqual({ offers: [] });
+        });
+
+        it('should throw on 401 unauthorized error', async () => {
+            const error = new Error('Unauthorized');
+            error.response = { status: 401, data: 'Invalid API key' };
+            mockAxiosInstance.mockRejectedValue(error);
+
+            await expect(api.fetchWithRetry('https://api.test/endpoint', {}, 1, 0))
+                .rejects
+                .toThrow('Invalid API key');
+        });
+
+        it('should retry on 500 error and throw after retries', async () => {
+            const error = new Error('Server Error');
+            error.response = { status: 500, data: 'Internal error' };
+            mockAxiosInstance.mockRejectedValue(error);
+
+            await expect(api.fetchWithRetry('https://api.test/endpoint', {}, 2, 0))
+                .rejects
+                .toThrow('HTTP error! status: 500');
+            expect(mockAxiosInstance).toHaveBeenCalledTimes(2);
+        });
+
+        it('should handle ECONNABORTED timeout error', async () => {
+            const error = new Error('Timeout');
+            error.code = 'ECONNABORTED';
+            mockAxiosInstance.mockRejectedValue(error);
+
+            await expect(api.fetchWithRetry('https://api.test/endpoint', {}, 2, 0))
+                .rejects
+                .toThrow('Timeout');
+        });
+
+        it('should handle network error with code', async () => {
+            const error = new Error('Network failed');
+            error.code = 'ENETUNREACH';
+            mockAxiosInstance.mockRejectedValue(error);
+
+            await expect(api.fetchWithRetry('https://api.test/endpoint', {}, 2, 0))
+                .rejects
+                .toThrow('Network failed');
         });
     });
 

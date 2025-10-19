@@ -146,6 +146,33 @@ describe('ReservoirApi', () => {
             expect(capturedUrl).toContain('id=0xabc123');
             expect(capturedUrl).not.toContain('limit=');
         });
+
+        it('should transform collection data correctly', async () => {
+            global.fetch = async () => ({
+                ok: true,
+                json: async () => ({
+                    collections: [{
+                        slug: 'test-collection',
+                        name: 'Test Collection',
+                        id: 'test-id',
+                        volume: { '1day': 100 },
+                        floorAsk: { price: { amount: { native: 1.5 } } },
+                        topBid: { price: { amount: { native: 1.2 } } },
+                        tokenCount: 1000
+                    }],
+                    continuation: 'next-token'
+                })
+            });
+
+            const result = await reservoirApi.getTopCollections();
+
+            expect(result.data).toHaveLength(1);
+            expect(result.data[0].slug).toBe('test-collection');
+            expect(result.data[0].name).toBe('Test Collection');
+            expect(result.data[0].stats.volume24h).toBe(100);
+            expect(result.data[0].stats.floorPrice).toBe(1.5);
+            expect(result.continuation).toBe('next-token');
+        });
     });
 
     describe('getCollectionOffers', () => {
@@ -368,6 +395,30 @@ describe('ReservoirApi', () => {
 
             expect(capturedHeaders['Custom-Header']).toBe('value');
             expect(capturedHeaders['x-api-key']).toBe(mockApiKey);
+        });
+
+        it('should throw error on HTTP error response after retries', async () => {
+            global.fetch = async () => ({
+                ok: false,
+                status: 500,
+                text: async () => 'Internal Server Error'
+            });
+
+            await expect(
+                reservoirApi.fetchWithRetry('https://test.com', {}, 2, 0)
+            ).rejects.toThrow('HTTP error! status: 500');
+        });
+
+        it('should handle non-ok response with error text', async () => {
+            global.fetch = async () => ({
+                ok: false,
+                status: 404,
+                text: async () => 'Not Found'
+            });
+
+            await expect(
+                reservoirApi.fetchWithRetry('https://test.com', {}, 1, 0)
+            ).rejects.toThrow('HTTP error! status: 404, details: Not Found');
         });
     });
 });

@@ -8,9 +8,11 @@ import {
     checkSufficientBalance,
     buySpecificNFT,
     buyFloorNFT,
-    estimateGasFee
+    estimateGasFee,
+    confirmPurchase
 } from '../services/buyService.js';
 import { ethers } from 'ethers';
+import enquirer from 'enquirer';
 
 describe('BuyService', () => {
     describe('validatePrice', () => {
@@ -551,6 +553,322 @@ describe('BuyService', () => {
                     mockOptions
                 )
             ).rejects.toThrow('exceeds maximum acceptable price');
+        });
+    });
+
+    describe('confirmPurchase', () => {
+        let mockPrompt;
+
+        beforeEach(() => {
+            // Mock console.log to avoid cluttering test output
+            jest.spyOn(console, 'log').mockImplementation(() => {});
+
+            // Mock enquirer prompt
+            mockPrompt = jest.spyOn(enquirer, 'prompt');
+        });
+
+        afterEach(() => {
+            console.log.mockRestore();
+            mockPrompt.mockRestore();
+        });
+
+        it('should not throw when user confirms purchase', async () => {
+            mockPrompt.mockResolvedValue({ confirmed: true });
+
+            const nftInfo = {
+                type: 'Specific NFT',
+                contractAddress: '0xContract',
+                tokenId: '123',
+                price: 1.5,
+                seller: '0xSeller'
+            };
+
+            await expect(confirmPurchase(nftInfo, 0.001)).resolves.not.toThrow();
+            expect(mockPrompt).toHaveBeenCalled();
+        });
+
+        it('should throw error when user cancels purchase', async () => {
+            mockPrompt.mockResolvedValue({ confirmed: false });
+
+            const nftInfo = {
+                type: 'Floor NFT',
+                collection: 'test-collection',
+                contractAddress: '0xContract',
+                tokenId: '456',
+                price: 2.0,
+                seller: '0xSeller'
+            };
+
+            await expect(confirmPurchase(nftInfo, 0.002))
+                .rejects.toThrow('Purchase cancelled by user');
+        });
+
+        it('should display collection name for floor NFT', async () => {
+            mockPrompt.mockResolvedValue({ confirmed: true });
+
+            const nftInfo = {
+                type: 'Floor NFT',
+                collection: 'cool-nfts',
+                contractAddress: '0xContract',
+                tokenId: '789',
+                price: 0.5,
+                seller: '0xSeller'
+            };
+
+            await confirmPurchase(nftInfo, 0.0001);
+
+            // Verify console.log was called with collection info
+            expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Collection: cool-nfts'));
+        });
+
+        it('should format gas fee correctly for small amounts (< 0.0001 ETH)', async () => {
+            mockPrompt.mockResolvedValue({ confirmed: true });
+
+            const nftInfo = {
+                type: 'Specific NFT',
+                contractAddress: '0xContract',
+                tokenId: '100',
+                price: 1.0,
+                seller: '0xSeller'
+            };
+
+            await confirmPurchase(nftInfo, 0.00005);
+
+            // Check that gas was formatted in gwei
+            expect(console.log).toHaveBeenCalledWith(expect.stringContaining('gwei'));
+        });
+
+        it('should format gas fee correctly for larger amounts (>= 0.0001 ETH)', async () => {
+            mockPrompt.mockResolvedValue({ confirmed: true });
+
+            const nftInfo = {
+                type: 'Specific NFT',
+                contractAddress: '0xContract',
+                tokenId: '200',
+                price: 1.0,
+                seller: '0xSeller'
+            };
+
+            await confirmPurchase(nftInfo, 0.001);
+
+            // Check that gas was formatted in ETH (without gwei)
+            const gasLogCall = console.log.mock.calls.find(call =>
+                call[0] && call[0].includes('Estimated Gas:')
+            );
+            expect(gasLogCall).toBeDefined();
+            expect(gasLogCall[0]).toMatch(/0\.001000 ETH/);
+        });
+    });
+
+    describe('buySpecificNFT with confirmation', () => {
+        let mockSdk, mockWallet, mockOpenseaApi, mockPrompt;
+
+        beforeEach(() => {
+            mockSdk = {
+                fulfillOrder: jest.fn()
+            };
+
+            mockWallet = {
+                address: '0x1234567890123456789012345678901234567890',
+                provider: {
+                    getBalance: jest.fn(),
+                    getFeeData: jest.fn()
+                },
+                getAddress: jest.fn()
+            };
+
+            mockOpenseaApi = {
+                getListingByTokenId: jest.fn()
+            };
+
+            jest.spyOn(console, 'log').mockImplementation(() => {});
+            mockPrompt = jest.spyOn(enquirer, 'prompt');
+
+            // Setup default mocks
+            mockWallet.getAddress.mockResolvedValue('0x1234567890123456789012345678901234567890');
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('10.0'));
+            mockWallet.provider.getFeeData.mockResolvedValue({
+                maxFeePerGas: ethers.parseUnits('1', 'gwei'),
+                gasPrice: ethers.parseUnits('1', 'gwei')
+            });
+        });
+
+        afterEach(() => {
+            console.log.mockRestore();
+            mockPrompt.mockRestore();
+        });
+
+        it('should prompt for confirmation when skipConfirm is false', async () => {
+            const mockListing = {
+                price: {
+                    current: {
+                        value: ethers.parseEther('1.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSellerAddress'
+                    }
+                },
+                order: {}
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+            mockPrompt.mockResolvedValue({ confirmed: true });
+
+            const result = await buySpecificNFT(
+                mockSdk,
+                '0xContractAddress',
+                '123',
+                mockWallet,
+                mockOpenseaApi,
+                { skipConfirm: false }
+            );
+
+            expect(result).toBe('0xtxhash');
+            expect(mockPrompt).toHaveBeenCalled();
+        });
+
+        it('should cancel purchase when user rejects confirmation', async () => {
+            const mockListing = {
+                price: {
+                    current: {
+                        value: ethers.parseEther('1.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSellerAddress'
+                    }
+                },
+                order: {}
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockPrompt.mockResolvedValue({ confirmed: false });
+
+            await expect(
+                buySpecificNFT(
+                    mockSdk,
+                    '0xContractAddress',
+                    '123',
+                    mockWallet,
+                    mockOpenseaApi,
+                    { skipConfirm: false }
+                )
+            ).rejects.toThrow('Purchase cancelled by user');
+
+            expect(mockSdk.fulfillOrder).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('buyFloorNFT with confirmation', () => {
+        let mockSdk, mockWallet, mockOpenseaApi, mockPrompt;
+
+        beforeEach(() => {
+            mockSdk = {
+                fulfillOrder: jest.fn()
+            };
+
+            mockWallet = {
+                address: '0x1234567890123456789012345678901234567890',
+                provider: {
+                    getBalance: jest.fn(),
+                    getFeeData: jest.fn()
+                },
+                getAddress: jest.fn()
+            };
+
+            mockOpenseaApi = {
+                getBestListings: jest.fn()
+            };
+
+            jest.spyOn(console, 'log').mockImplementation(() => {});
+            mockPrompt = jest.spyOn(enquirer, 'prompt');
+
+            // Setup default mocks
+            mockWallet.getAddress.mockResolvedValue('0x1234567890123456789012345678901234567890');
+            mockWallet.provider.getBalance.mockResolvedValue(ethers.parseEther('10.0'));
+            mockWallet.provider.getFeeData.mockResolvedValue({
+                maxFeePerGas: ethers.parseUnits('1', 'gwei'),
+                gasPrice: ethers.parseUnits('1', 'gwei')
+            });
+        });
+
+        afterEach(() => {
+            console.log.mockRestore();
+            mockPrompt.mockRestore();
+        });
+
+        it('should prompt for confirmation when skipConfirm is false', async () => {
+            const mockListings = [{
+                price: {
+                    current: {
+                        value: ethers.parseEther('1.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSeller',
+                        offer: [{
+                            token: '0xContract',
+                            identifierOrCriteria: '123'
+                        }]
+                    }
+                },
+                order: {}
+            }];
+
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: mockListings });
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+            mockPrompt.mockResolvedValue({ confirmed: true });
+
+            const result = await buyFloorNFT(
+                mockSdk,
+                'test-collection',
+                mockWallet,
+                mockOpenseaApi,
+                { skipConfirm: false }
+            );
+
+            expect(result).toBe('0xtxhash');
+            expect(mockPrompt).toHaveBeenCalled();
+        });
+
+        it('should cancel purchase when user rejects confirmation', async () => {
+            const mockListings = [{
+                price: {
+                    current: {
+                        value: ethers.parseEther('1.0').toString()
+                    }
+                },
+                protocol_data: {
+                    parameters: {
+                        offerer: '0xSeller',
+                        offer: [{
+                            token: '0xContract',
+                            identifierOrCriteria: '123'
+                        }]
+                    }
+                },
+                order: {}
+            }];
+
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: mockListings });
+            mockPrompt.mockResolvedValue({ confirmed: false });
+
+            await expect(
+                buyFloorNFT(
+                    mockSdk,
+                    'test-collection',
+                    mockWallet,
+                    mockOpenseaApi,
+                    { skipConfirm: false }
+                )
+            ).rejects.toThrow('Purchase cancelled by user');
+
+            expect(mockSdk.fulfillOrder).not.toHaveBeenCalled();
         });
     });
 });

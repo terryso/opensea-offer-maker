@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { LogLevel, logger } from '../utils/logger.js';
 
 describe('Logger', () => {
@@ -54,6 +55,14 @@ describe('Logger', () => {
             logger.setLevel(LogLevel.ERROR);
             expect(() => logger.error('Error:', { code: 500 }, 'details')).not.toThrow();
         });
+
+        it('should not log when level is below ERROR', () => {
+            const spy = jest.spyOn(console, 'error').mockImplementation();
+            logger.setLevel(LogLevel.ERROR - 1);
+            logger.error('Should not appear');
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
+        });
     });
 
     describe('warn', () => {
@@ -65,6 +74,14 @@ describe('Logger', () => {
         it('should handle multiple arguments', () => {
             logger.setLevel(LogLevel.WARN);
             expect(() => logger.warn('Warning:', 'Something might be wrong')).not.toThrow();
+        });
+
+        it('should not log when level is below WARN', () => {
+            const spy = jest.spyOn(console, 'warn').mockImplementation();
+            logger.setLevel(LogLevel.ERROR);
+            logger.warn('Should not appear');
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
         });
     });
 
@@ -78,6 +95,14 @@ describe('Logger', () => {
             logger.setLevel(LogLevel.INFO);
             expect(() => logger.info('Info:', 'Operation completed', { status: 'success' })).not.toThrow();
         });
+
+        it('should not log when level is below INFO', () => {
+            const spy = jest.spyOn(console, 'log').mockImplementation();
+            logger.setLevel(LogLevel.WARN);
+            logger.info('Should not appear');
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
+        });
     });
 
     describe('debug', () => {
@@ -89,6 +114,14 @@ describe('Logger', () => {
         it('should handle multiple arguments', () => {
             logger.setLevel(LogLevel.DEBUG);
             expect(() => logger.debug('Debug:', 'Variable value:', 42)).not.toThrow();
+        });
+
+        it('should not log when level is below DEBUG', () => {
+            const spy = jest.spyOn(console, 'debug').mockImplementation();
+            logger.setLevel(LogLevel.INFO);
+            logger.debug('Should not appear');
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
         });
     });
 
@@ -110,6 +143,14 @@ describe('Logger', () => {
             };
 
             expect(() => logger.debugObject('Complex', complexObject)).not.toThrow();
+        });
+
+        it('should not log when level is below DEBUG', () => {
+            const spy = jest.spyOn(console, 'debug').mockImplementation();
+            logger.setLevel(LogLevel.INFO);
+            logger.debugObject('Label', { data: 'test' });
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
         });
     });
 

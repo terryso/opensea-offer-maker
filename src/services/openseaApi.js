@@ -341,6 +341,64 @@ export class OpenSeaApi {
         }
     }
 
+    async getNFTLastSalePrice(contractAddress, tokenId) {
+        try {
+            // 使用 events API 获取最后的销售事件
+            const url = new URL(`${this.baseUrl}/api/v2/events/chain/${this.chainConfig.name}/contract/${contractAddress}/nfts/${tokenId}`);
+            url.searchParams.append('event_type', 'sale');
+            url.searchParams.append('limit', '1');
+
+            logger.debug('Fetching NFT last sale event:', url.toString());
+
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
+            logger.debug('NFT events response:', JSON.stringify(response, null, 2));
+
+            // 检查是否有销售事件
+            const events = response?.asset_events;
+            if (!events || events.length === 0) {
+                logger.warn('No sale events found for this NFT');
+                return null;
+            }
+
+            // 获取第一个（最新的）销售事件
+            const lastSale = events[0];
+
+            // 提取价格信息
+            const payment = lastSale.payment;
+            if (!payment) {
+                logger.warn('No payment information in last sale event');
+                return null;
+            }
+
+            // 价格可能在 payment.quantity 或其他字段中
+            const priceValue = payment.quantity || payment.value || '0';
+
+            // 转换为ETH
+            const priceInETH = parseFloat(ethers.formatEther(priceValue));
+
+            logger.debug(`Last sale price: ${priceInETH} ETH`);
+            logger.debug(`Sale event timestamp: ${lastSale.event_timestamp}`);
+
+            return {
+                price: priceInETH,
+                eventTimestamp: lastSale.event_timestamp,
+                fromAddress: lastSale.from_address || lastSale.seller,
+                toAddress: lastSale.to_address || lastSale.winner_account?.address,
+                transaction: lastSale.transaction
+            };
+        } catch (error) {
+            logger.error('Failed to fetch NFT last sale price:', error.message);
+            return null;
+        }
+    }
+
     async createListing(params) {
         const { contractAddress, tokenId, price, expirationTime, wallet, walletAddress } = params;
         

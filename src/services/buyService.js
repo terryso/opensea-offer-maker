@@ -1,7 +1,6 @@
 import { ethers } from 'ethers';
 import { logger } from '../utils/logger.js';
 import enquirer from 'enquirer';
-const { prompt } = enquirer;
 
 /**
  * 购买指定NFT
@@ -230,7 +229,7 @@ export async function confirmPurchase(nftInfo, estimatedGas) {
     console.log('⚠️  Note: This will execute a real transaction on the blockchain.');
     console.log('='.repeat(50) + '\n');
 
-    const response = await prompt({
+    const response = await enquirer.prompt({
         type: 'confirm',
         name: 'confirmed',
         message: 'Do you want to proceed with this purchase?',
