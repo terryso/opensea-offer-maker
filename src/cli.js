@@ -25,7 +25,8 @@ import {
     sendCommand,
     keyCommand,
     balanceCommand,
-    chainCommand
+    chainCommand,
+    cacheCommand
 } from './commands/index.js';
 import { setupEthersProxy } from './utils/proxySetup.js';
 
@@ -50,6 +51,7 @@ program
     .addCommand(sendCommand)
     .addCommand(keyCommand)
     .addCommand(balanceCommand)
-    .addCommand(chainCommand);
+    .addCommand(chainCommand)
+    .addCommand(cacheCommand);
 
 program.parse(process.argv); 

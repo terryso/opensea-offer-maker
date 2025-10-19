@@ -3,26 +3,76 @@
  */
 
 import { jest } from '@jest/globals';
-import { OpenSeaApi } from '../services/openseaApi.js';
-import { ethers } from 'ethers';
 
-// Mock setTimeout 来避免真实的延迟
+// Mock axios before importing OpenSeaApi
+const mockAxiosInstance = jest.fn();
+const mockAxiosCreate = jest.fn(() => mockAxiosInstance);
+
+jest.unstable_mockModule('axios', () => ({
+    default: {
+        create: mockAxiosCreate
+    }
+}));
+
+// Mock other dependencies
+jest.unstable_mockModule('https-proxy-agent', () => ({
+    HttpsProxyAgent: jest.fn()
+}));
+
+jest.unstable_mockModule('@opensea/seaport-js', () => ({
+    Seaport: jest.fn()
+}));
+
+jest.unstable_mockModule('@opensea/seaport-js/lib/constants.js', () => ({
+    ItemType: {}
+}));
+
+const mockFilterNFTs = jest.fn();
+
+jest.unstable_mockModule('../services/cacheService.js', () => ({
+    CacheService: jest.fn(() => ({
+        _filterNFTs: mockFilterNFTs
+    }))
+}));
+
+jest.unstable_mockModule('../utils/logger.js', () => ({
+    logger: {
+        debug: jest.fn(),
+        error: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn()
+    }
+}));
+
+// Now import the module under test
+const { OpenSeaApi } = await import('../services/openseaApi.js');
+const { CacheService } = await import('../services/cacheService.js');
+
+// Mock setTimeout to avoid real delays
 const originalSetTimeout = global.setTimeout;
 global.setTimeout = (fn, delay) => {
-    // 立即执行，不等待
     return originalSetTimeout(fn, 0);
 };
 
 describe('OpenSeaApi', () => {
     let api;
-    let mockAxiosInstance;
+    let mockCacheService;
 
     beforeEach(() => {
+        // Clear all mocks
+        jest.clearAllMocks();
+        mockAxiosInstance.mockReset();
+        mockAxiosCreate.mockReset();
+        mockAxiosCreate.mockReturnValue(mockAxiosInstance);
+        mockFilterNFTs.mockReset();
+
         api = new OpenSeaApi('test-api-key', 'https://api.test', { name: 'ethereum' });
 
-        // 直接 mock axiosInstance
-        mockAxiosInstance = jest.fn();
-        api.axiosInstance = mockAxiosInstance;
+        // Set up reference to mock methods and replace the instance
+        mockCacheService = {
+            _filterNFTs: mockFilterNFTs
+        };
+        api.cacheService = mockCacheService;
     });
 
     describe('fetchWithRetry', () => {
@@ -428,6 +478,358 @@ describe('OpenSeaApi', () => {
 
             const result = await api.getCollectionInfo('test-collection');
             expect(result).toBe(null);
+        });
+    });
+
+    describe('getWalletNFTs', () => {
+        const mockNFT1 = {
+            contract: '0x123',
+            identifier: '1',
+            name: 'Test NFT #1',
+            collection: { name: 'Test Collection', slug: 'test-collection' },
+            image_url: 'https://example.com/1.png',
+            token_standard: 'erc721'
+        };
+
+        const mockNFT2 = {
+            contract: '0x456',
+            identifier: '2',
+            name: 'Test NFT #2',
+            collection: { name: 'Another Collection', slug: 'another-collection' },
+            image_url: 'https://example.com/2.png',
+            token_standard: 'erc721'
+        };
+
+        beforeEach(() => {
+            // Setup default filter behavior
+            mockCacheService._filterNFTs.mockImplementation(async (nfts) => ({
+                filtered: nfts,
+                filteredCount: 0
+            }));
+        });
+
+        it('should fetch wallet NFTs successfully with single page', async () => {
+            const mockResponse = {
+                nfts: [mockNFT1, mockNFT2],
+                next: null
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getWalletNFTs('0xwallet123');
+
+            expect(result).toHaveLength(2);
+            expect(result[0]).toEqual({
+                contract: '0x123',
+                tokenId: '1',
+                name: 'Test NFT #1',
+                collection: 'Test Collection',
+                collectionSlug: 'test-collection',
+                imageUrl: 'https://example.com/1.png',
+                tokenStandard: 'erc721'
+            });
+            expect(mockCacheService._filterNFTs).toHaveBeenCalledWith(expect.any(Array));
+        });
+
+        it('should handle pagination correctly', async () => {
+            const mockResponse1 = {
+                nfts: [mockNFT1],
+                next: 'page2'
+            };
+
+            const mockResponse2 = {
+                nfts: [mockNFT2],
+                next: null
+            };
+
+            mockAxiosInstance
+                .mockResolvedValueOnce({ data: mockResponse1 })
+                .mockResolvedValueOnce({ data: mockResponse2 });
+
+            const result = await api.getWalletNFTs('0xwallet123');
+
+            expect(result).toHaveLength(2);
+            expect(mockAxiosInstance).toHaveBeenCalledTimes(2);
+
+            // Check first call URL
+            expect(mockAxiosInstance).toHaveBeenCalledWith({
+                url: 'https://api.test/api/v2/chain/ethereum/account/0xwallet123/nfts?limit=50',
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': 'test-api-key'
+                }
+            });
+
+            // Check second call URL with next parameter
+            expect(mockAxiosInstance).toHaveBeenCalledWith({
+                url: 'https://api.test/api/v2/chain/ethereum/account/0xwallet123/nfts?limit=50&next=page2',
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': 'test-api-key'
+                }
+            });
+        });
+
+        it('should call progress callback during pagination', async () => {
+            const mockResponse1 = {
+                nfts: [mockNFT1],
+                next: 'page2'
+            };
+
+            const mockResponse2 = {
+                nfts: [mockNFT2],
+                next: null
+            };
+
+            mockAxiosInstance
+                .mockResolvedValueOnce({ data: mockResponse1 })
+                .mockResolvedValueOnce({ data: mockResponse2 });
+
+            const onProgress = jest.fn();
+            await api.getWalletNFTs('0xwallet123', { onProgress });
+
+            expect(onProgress).toHaveBeenCalledTimes(2);
+            expect(onProgress).toHaveBeenCalledWith({
+                page: 1,
+                currentPageCount: 1,
+                totalCount: 1,
+                hasMore: true
+            });
+            expect(onProgress).toHaveBeenCalledWith({
+                page: 2,
+                currentPageCount: 1,
+                totalCount: 2,
+                hasMore: false
+            });
+        });
+
+        it('should apply collection filtering', async () => {
+            const mockResponse = {
+                nfts: [mockNFT1, mockNFT2],
+                next: null
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            // Mock filtering to remove one NFT
+            mockCacheService._filterNFTs.mockResolvedValue({
+                filtered: [
+                    {
+                        contract: '0x123',
+                        tokenId: '1',
+                        name: 'Test NFT #1',
+                        collection: 'Test Collection',
+                        collectionSlug: 'test-collection',
+                        imageUrl: 'https://example.com/1.png',
+                        tokenStandard: 'erc721'
+                    }
+                ],
+                filteredCount: 1
+            });
+
+            const result = await api.getWalletNFTs('0xwallet123');
+
+            expect(result).toHaveLength(1);
+            expect(mockCacheService._filterNFTs).toHaveBeenCalledWith(expect.arrayContaining([
+                expect.objectContaining({ collectionSlug: 'test-collection' }),
+                expect.objectContaining({ collectionSlug: 'another-collection' })
+            ]));
+        });
+
+        it('should handle custom chain and limit options', async () => {
+            const mockResponse = {
+                nfts: [mockNFT1],
+                next: null
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            await api.getWalletNFTs('0xwallet123', {
+                chain: 'base',
+                limit: 100
+            });
+
+            expect(mockAxiosInstance).toHaveBeenCalledWith({
+                url: 'https://api.test/api/v2/chain/base/account/0xwallet123/nfts?limit=100',
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': 'test-api-key'
+                }
+            });
+        });
+
+        it('should enforce maximum limit of 200', async () => {
+            const mockResponse = {
+                nfts: [mockNFT1],
+                next: null
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            await api.getWalletNFTs('0xwallet123', { limit: 500 });
+
+            expect(mockAxiosInstance).toHaveBeenCalledWith({
+                url: 'https://api.test/api/v2/chain/ethereum/account/0xwallet123/nfts?limit=200',
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': 'test-api-key'
+                }
+            });
+        });
+
+        it('should handle array response format', async () => {
+            mockAxiosInstance.mockResolvedValue({
+                data: [mockNFT1, mockNFT2]
+            });
+
+            const result = await api.getWalletNFTs('0xwallet123');
+
+            expect(result).toHaveLength(2);
+            expect(result[0].tokenId).toBe('1');
+        });
+
+        it('should handle unexpected response format', async () => {
+            mockAxiosInstance.mockResolvedValue({
+                data: { unexpected: 'format' }
+            });
+
+            const result = await api.getWalletNFTs('0xwallet123');
+
+            expect(result).toEqual([]);
+        });
+
+        it('should stop pagination at 100 pages maximum', async () => {
+            // Mock response that always has a next page
+            const mockResponse = {
+                nfts: [mockNFT1],
+                next: 'next-page'
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            await api.getWalletNFTs('0xwallet123');
+
+            // Should stop at 100 pages
+            expect(mockAxiosInstance).toHaveBeenCalledTimes(100);
+        });
+
+        it('should throw error for invalid wallet address', async () => {
+            await expect(api.getWalletNFTs('')).rejects.toThrow('Valid wallet address is required');
+            await expect(api.getWalletNFTs(null)).rejects.toThrow('Valid wallet address is required');
+            await expect(api.getWalletNFTs(123)).rejects.toThrow('Valid wallet address is required');
+        });
+
+        it('should handle API errors', async () => {
+            mockAxiosInstance.mockRejectedValue(new Error('API Error'));
+
+            await expect(api.getWalletNFTs('0xwallet123')).rejects.toThrow('API Error');
+        });
+
+        it('should transform NFT data correctly with missing fields', async () => {
+            const incompleteNFT = {
+                contract: '0x789',
+                identifier: '3'
+                // Missing other fields
+            };
+
+            const mockResponse = {
+                nfts: [incompleteNFT],
+                next: null
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getWalletNFTs('0xwallet123');
+
+            expect(result[0]).toEqual({
+                contract: '0x789',
+                tokenId: '3',
+                name: 'Unknown Collection #3',
+                collection: 'Unknown Collection',
+                collectionSlug: '',
+                imageUrl: '',
+                tokenStandard: 'erc721'
+            });
+        });
+    });
+
+    describe('_transformNFTForCache', () => {
+        it('should transform OpenSea NFT response correctly', () => {
+            const openSeaNFT = {
+                contract: '0x123',
+                identifier: '456',
+                name: 'Test NFT',
+                collection: { name: 'Test Collection', slug: 'test-collection' },
+                image_url: 'https://example.com/image.png',
+                token_standard: 'ERC721'
+            };
+
+            const result = api._transformNFTForCache(openSeaNFT);
+
+            expect(result).toEqual({
+                contract: '0x123',
+                tokenId: '456',
+                name: 'Test NFT',
+                collection: 'Test Collection',
+                collectionSlug: 'test-collection',
+                imageUrl: 'https://example.com/image.png',
+                tokenStandard: 'erc721'
+            });
+        });
+
+        it('should handle alternative field names', () => {
+            const altFormatNFT = {
+                asset_contract: { address: '0x456', schema_name: 'ERC1155' },
+                token_id: '789',
+                collection: { name: 'Alt Collection', slug: 'alt-collection' },
+                image_preview_url: 'https://example.com/preview.png'
+            };
+
+            const result = api._transformNFTForCache(altFormatNFT);
+
+            expect(result).toEqual({
+                contract: '0x456',
+                tokenId: '789',
+                name: 'Alt Collection #789',
+                collection: 'Alt Collection',
+                collectionSlug: 'alt-collection',
+                imageUrl: 'https://example.com/preview.png',
+                tokenStandard: 'erc1155'
+            });
+        });
+
+        it('should handle missing fields with defaults', () => {
+            const incompleteNFT = {
+                contract: '0x789'
+            };
+
+            const result = api._transformNFTForCache(incompleteNFT);
+
+            expect(result).toEqual({
+                contract: '0x789',
+                tokenId: '',
+                name: 'Unknown Collection #',
+                collection: 'Unknown Collection',
+                collectionSlug: '',
+                imageUrl: '',
+                tokenStandard: 'erc721'
+            });
         });
     });
 }); 

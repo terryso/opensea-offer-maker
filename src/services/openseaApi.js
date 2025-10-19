@@ -4,12 +4,14 @@ import { ethers } from 'ethers';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { Seaport } from '@opensea/seaport-js';
 import { ItemType } from '@opensea/seaport-js/lib/constants.js';
+import { CacheService } from './cacheService.js';
 
 export class OpenSeaApi {
     constructor(apiKey, baseUrl, chainConfig) {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
         this.chainConfig = chainConfig;
+        this.cacheService = new CacheService();
 
         // 代理配置
         const proxyUrl = process.env.HTTP_PROXY || 'http://127.0.0.1:7890';
@@ -499,5 +501,133 @@ export class OpenSeaApi {
             }
             throw error;
         }
+    }
+
+    /**
+     * Get all NFTs for a wallet address with pagination and collection filtering
+     *
+     * @param {string} walletAddress - The wallet address to fetch NFTs for
+     * @param {Object} options - Options for the request
+     * @param {string} options.chain - Chain to query (defaults to this.chainConfig.name)
+     * @param {number} options.limit - Limit per page (default: 50, max: 200)
+     * @param {Function} options.onProgress - Progress callback for pagination
+     * @returns {Promise<Array>} Array of NFT objects with structure needed for cache
+     * @throws {Error} If API call fails or wallet address is invalid
+     */
+    async getWalletNFTs(walletAddress, options = {}) {
+        try {
+            // Validate wallet address
+            if (!walletAddress || typeof walletAddress !== 'string') {
+                throw new Error('Valid wallet address is required');
+            }
+
+            const chain = options.chain || this.chainConfig.name;
+            const limit = Math.min(options.limit || 50, 200); // OpenSea API max is typically 200
+            let next = null;
+            let allNFTs = [];
+            let page = 1;
+
+            logger.info(`Fetching NFTs for wallet ${walletAddress} on ${chain}`);
+
+            do {
+                // Construct URL based on OpenSea API v2 pattern
+                const url = new URL(`${this.baseUrl}/api/v2/chain/${chain}/account/${walletAddress}/nfts`);
+                url.searchParams.set('limit', limit.toString());
+
+                if (next) {
+                    url.searchParams.set('next', next);
+                }
+
+                logger.debug(`Fetching NFTs page ${page}:`, url.toString());
+
+                const response = await this.fetchWithRetry(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-API-KEY': this.apiKey
+                    }
+                });
+
+                // Handle different response formats
+                let nfts = [];
+                if (response.nfts && Array.isArray(response.nfts)) {
+                    nfts = response.nfts;
+                } else if (Array.isArray(response)) {
+                    nfts = response;
+                } else {
+                    logger.warn('Unexpected response format:', response);
+                    break;
+                }
+
+                // Transform NFTs to cache format
+                const transformedNFTs = nfts.map(nft => this._transformNFTForCache(nft));
+                allNFTs.push(...transformedNFTs);
+
+                logger.debug(`Fetched ${nfts.length} NFTs on page ${page}, total: ${allNFTs.length}`);
+
+                // Progress callback
+                if (options.onProgress && typeof options.onProgress === 'function') {
+                    options.onProgress({
+                        page,
+                        currentPageCount: nfts.length,
+                        totalCount: allNFTs.length,
+                        hasMore: !!response.next
+                    });
+                }
+
+                // Check for next page
+                next = response.next || null;
+                page++;
+
+                // Safety check to prevent infinite loops
+                if (page > 100) {
+                    logger.warn('Reached maximum page limit (100) - stopping pagination');
+                    break;
+                }
+
+            } while (next);
+
+            // Apply collection filtering using CacheService
+            const { filtered: filteredNFTs, filteredCount } = await this.cacheService._filterNFTs(allNFTs);
+
+            if (filteredCount > 0) {
+                logger.info(`Filtered out ${filteredCount} NFTs from ignored collections`);
+            }
+
+            logger.info(`Successfully fetched ${filteredNFTs.length} NFTs for wallet ${walletAddress} (${filteredCount} filtered)`);
+            return filteredNFTs;
+
+        } catch (error) {
+            logger.error('Failed to fetch wallet NFTs:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Transform OpenSea NFT response to cache format
+     *
+     * @param {Object} nft - OpenSea NFT object
+     * @returns {Object} Transformed NFT for cache storage
+     * @private
+     */
+    _transformNFTForCache(nft) {
+        // Handle different OpenSea API response formats
+        const contract = nft.contract || nft.asset_contract?.address || '';
+        const tokenId = nft.identifier || nft.token_id || '';
+        const name = nft.name || `${nft.collection?.name || 'Unknown Collection'} #${tokenId}`;
+        const collection = nft.collection?.name || 'Unknown Collection';
+        const collectionSlug = nft.collection?.slug || '';
+        const imageUrl = nft.image_url || nft.image_preview_url || nft.image_thumbnail_url || '';
+        const tokenStandard = nft.asset_contract?.schema_name || nft.token_standard || 'erc721';
+
+        return {
+            contract,
+            tokenId,
+            name,
+            collection,
+            collectionSlug,
+            imageUrl,
+            tokenStandard: tokenStandard.toLowerCase()
+        };
     }
 } 

@@ -149,6 +149,29 @@ node src/cli.js swap -a 0.1 -d weth2eth
 ```
 
 ### Cross-Market Listing
+
+#### Interactive Mode (Recommended)
+Select NFTs from your cached wallet NFTs with an interactive interface:
+
+```bash
+# Interactive NFT selection from cache
+node src/cli.js list --interactive -p 0.1 --marketplaces opensea,blur
+
+# Interactive with floor price difference
+node src/cli.js list --interactive --floor-diff +10%
+
+# Interactive with profit margin over purchase price
+node src/cli.js list --interactive --profit-margin 0.05 -e 7d
+
+# Interactive with profit percentage
+node src/cli.js list --interactive --profit-percent 15 --marketplaces opensea
+```
+
+**Note**: Interactive mode requires cached NFTs. First run `node src/cli.js cache refresh` to populate your NFT cache.
+
+#### Manual Mode
+Specify contract address and token ID directly:
+
 ```bash
 # List NFT on multiple marketplaces
 node src/cli.js list -a contract_address -t token_id -p 0.1 --marketplaces opensea,blur
