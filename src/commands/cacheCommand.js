@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { logger } from '../utils/logger.js';
 import CacheService from '../services/cacheService.js';
 import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL } from '../config.js';
-import { addChainOption, getEffectiveChain } from '../utils/commandUtils.js';
+import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 import { OpenSeaApi } from '../services/openseaApi.js';
 
 export const cacheCommand = new Command('cache')
@@ -12,24 +12,28 @@ export const cacheCommand = new Command('cache')
 const refreshCommand = cacheCommand
     .command('refresh')
     .description('Fetch and cache NFTs for specified wallet')
-    .requiredOption('-w, --wallet <address>', 'Wallet address to cache')
+    .option('-w, --wallet <address>', 'Wallet address to cache (defaults to current wallet)')
     .option('--debug', 'Enable debug logging');
 
-// Add chain option to refresh command
+// Add chain option and private key option to refresh command
 addChainOption(refreshCommand);
+addPrivateKeyOption(refreshCommand);
 
 refreshCommand.action(async (options) => {
     try {
-        if (!options.wallet) {
-            logger.error('Wallet address is required. Use -w or --wallet option');
-            process.exit(1);
+        const chainConfig = await getEffectiveChain(options);
+        
+        // 如果没有指定钱包地址,使用当前默认钱包
+        let walletAddress = options.wallet;
+        if (!walletAddress) {
+            const wallet = await getWallet(options);
+            walletAddress = await wallet.getAddress();
         }
 
-        const chainConfig = await getEffectiveChain(options);
         const cacheService = new CacheService();
         const openseaApi = new OpenSeaApi(OPENSEA_API_KEY, OPENSEA_API_BASE_URL, chainConfig);
 
-        logger.info(`Starting NFT cache refresh for wallet ${options.wallet} on ${chainConfig.name}...`);
+        logger.info(`Starting NFT cache refresh for wallet ${walletAddress} on ${chainConfig.name}...`);
 
         // Progress callback for pagination
         const onProgress = (progress) => {
@@ -39,7 +43,7 @@ refreshCommand.action(async (options) => {
 
         // Fetch NFTs from OpenSea API (with collection filtering already applied)
         const startTime = Date.now();
-        const nfts = await openseaApi.getWalletNFTs(options.wallet, {
+        const nfts = await openseaApi.getWalletNFTs(walletAddress, {
             chain: chainConfig.name,
             onProgress
         });
@@ -49,10 +53,10 @@ refreshCommand.action(async (options) => {
 
         // Save to cache
         logger.info('💾 Saving to cache...');
-        const cacheData = await cacheService.saveCache(options.wallet, chainConfig.name, nfts);
+        const cacheData = await cacheService.saveCache(walletAddress, chainConfig.name, nfts);
 
-        logger.info(`\\n🎉 Cache refresh completed!`);
-        logger.info(`   Wallet: ${options.wallet}`);
+        logger.info(`\n🎉 Cache refresh completed!`);
+        logger.info(`   Wallet: ${walletAddress}`);
         logger.info(`   Chain: ${chainConfig.name}`);
         logger.info(`   NFTs Cached: ${cacheData.metadata.count}`);
         if (cacheData.metadata.filteredCount > 0) {
@@ -70,36 +74,43 @@ refreshCommand.action(async (options) => {
 });
 
 // Cache list subcommand
-cacheCommand
+const listCommand = cacheCommand
     .command('list')
     .description('Display cached NFTs with contract/tokenId info')
-    .option('-w, --wallet <address>', 'Wallet address to list')
-    .option('-c, --chain <chain>', 'Chain to list (ethereum, base, sepolia)', 'ethereum')
-    .option('--debug', 'Enable debug logging')
-    .action(async (options) => {
-        try {
-            const cacheService = new CacheService();
+    .option('-w, --wallet <address>', 'Wallet address to list (optional, defaults to current wallet)')
+    .option('--debug', 'Enable debug logging');
 
-            if (!options.wallet) {
-                logger.error('Wallet address is required. Use -w or --wallet option');
-                process.exit(1);
+// Add chain option and private key option to list command
+addChainOption(listCommand);
+addPrivateKeyOption(listCommand);
+
+listCommand.action(async (options) => {
+        try {
+            const chainConfig = await getEffectiveChain(options);
+            
+            // 如果没有指定钱包地址,使用当前默认钱包
+            let walletAddress = options.wallet;
+            if (!walletAddress) {
+                const wallet = await getWallet(options);
+                walletAddress = await wallet.getAddress();
             }
 
-            const cacheData = await cacheService.loadCache(options.wallet, options.chain);
+            const cacheService = new CacheService();
+            const cacheData = await cacheService.loadCache(walletAddress, chainConfig.name);
 
             if (!cacheData) {
-                logger.info(`No cache found for wallet ${options.wallet} on ${options.chain}`);
+                logger.info(`No cache found for wallet ${walletAddress} on ${chainConfig.name}`);
                 logger.info('Run "cache refresh" to populate cache');
                 return;
             }
 
-            logger.info(`\\nCached NFTs for ${options.wallet} on ${options.chain}:`);
+            logger.info(`\nCached NFTs for ${walletAddress} on ${chainConfig.name}:`);
             logger.info(`Total: ${cacheData.metadata.count} NFTs`);
             if (cacheData.metadata.filteredCount > 0) {
                 logger.info(`Filtered: ${cacheData.metadata.filteredCount} NFTs from ignored collections`);
             }
             logger.info(`Last updated: ${new Date(cacheData.metadata.timestamp).toLocaleString()}`);
-            logger.info('\\n--- NFTs ---');
+            logger.info('\n--- NFTs ---');
 
             cacheData.nfts.forEach((nft, index) => {
                 logger.info(`${index + 1}. ${nft.name || 'Unnamed'}`);
@@ -120,30 +131,40 @@ cacheCommand
     });
 
 // Cache clear subcommand
-cacheCommand
+const clearCommand = cacheCommand
     .command('clear')
     .description('Clear cache for current wallet or all wallets')
-    .option('-w, --wallet <address>', 'Wallet address to clear (if not provided, clears all)')
-    .option('-c, --chain <chain>', 'Chain to clear (ethereum, base, sepolia)', 'ethereum')
+    .option('-w, --wallet <address>', 'Wallet address to clear (optional, defaults to current wallet)')
     .option('--all', 'Clear all cache files')
-    .option('--debug', 'Enable debug logging')
-    .action(async (options) => {
+    .option('--debug', 'Enable debug logging');
+
+// Add chain option and private key option to clear command
+addChainOption(clearCommand);
+addPrivateKeyOption(clearCommand);
+
+clearCommand.action(async (options) => {
         try {
             const cacheService = new CacheService();
 
             if (options.all) {
                 const count = await cacheService.clearAllCache();
                 logger.info(`Cleared ${count} cache files`);
-            } else if (options.wallet) {
-                const cleared = await cacheService.clearCache(options.wallet, options.chain);
-                if (cleared) {
-                    logger.info(`Cleared cache for ${options.wallet} on ${options.chain}`);
-                } else {
-                    logger.info(`No cache found for ${options.wallet} on ${options.chain}`);
-                }
             } else {
-                logger.error('Either provide --wallet address or use --all flag');
-                process.exit(1);
+                const chainConfig = await getEffectiveChain(options);
+                
+                // 如果没有指定钱包地址,使用当前默认钱包
+                let walletAddress = options.wallet;
+                if (!walletAddress) {
+                    const wallet = await getWallet(options);
+                    walletAddress = await wallet.getAddress();
+                }
+                
+                const cleared = await cacheService.clearCache(walletAddress, chainConfig.name);
+                if (cleared) {
+                    logger.info(`Cleared cache for ${walletAddress} on ${chainConfig.name}`);
+                } else {
+                    logger.info(`No cache found for ${walletAddress} on ${chainConfig.name}`);
+                }
             }
 
         } catch (error) {
@@ -153,14 +174,18 @@ cacheCommand
     });
 
 // Cache status subcommand
-cacheCommand
+const statusCommand = cacheCommand
     .command('status')
     .description('Show cache info (count, last updated, size)')
-    .option('-w, --wallet <address>', 'Wallet address to check')
-    .option('-c, --chain <chain>', 'Chain to check (ethereum, base, sepolia)', 'ethereum')
+    .option('-w, --wallet <address>', 'Wallet address to check (optional, defaults to current wallet)')
     .option('--all', 'Show status for all cache files')
-    .option('--debug', 'Enable debug logging')
-    .action(async (options) => {
+    .option('--debug', 'Enable debug logging');
+
+// Add chain option and private key option to status command
+addChainOption(statusCommand);
+addPrivateKeyOption(statusCommand);
+
+statusCommand.action(async (options) => {
         try {
             const cacheService = new CacheService();
 
@@ -172,7 +197,7 @@ cacheCommand
                     return;
                 }
 
-                logger.info(`\\nFound ${caches.length} cache files:\\n`);
+                logger.info(`\nFound ${caches.length} cache files:\n`);
 
                 caches.forEach((cache, index) => {
                     logger.info(`${index + 1}. ${cache.walletAddress} (${cache.chain})`);
@@ -190,10 +215,19 @@ cacheCommand
                     logger.info('');
                 });
 
-            } else if (options.wallet) {
-                const status = await cacheService.getCacheStatus(options.wallet, options.chain);
+            } else {
+                const chainConfig = await getEffectiveChain(options);
+                
+                // 如果没有指定钱包地址,使用当前默认钱包
+                let walletAddress = options.wallet;
+                if (!walletAddress) {
+                    const wallet = await getWallet(options);
+                    walletAddress = await wallet.getAddress();
+                }
+                
+                const status = await cacheService.getCacheStatus(walletAddress, chainConfig.name);
 
-                logger.info(`\\nCache status for ${options.wallet} on ${options.chain}:`);
+                logger.info(`\nCache status for ${walletAddress} on ${chainConfig.name}:`);
 
                 if (!status.exists) {
                     logger.info('Status: No cache found');
@@ -214,10 +248,6 @@ cacheCommand
                         logger.info('⚠️  Cache is expired. Run "cache refresh" to update');
                     }
                 }
-
-            } else {
-                logger.error('Either provide --wallet address or use --all flag');
-                process.exit(1);
             }
 
         } catch (error) {
