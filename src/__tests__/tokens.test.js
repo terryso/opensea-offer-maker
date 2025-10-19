@@ -28,8 +28,8 @@ describe('tokens', () => {
     });
 
     describe('SUPPORTED_TOKENS', () => {
-        it('should have tokens for three chains', () => {
-            expect(Object.keys(SUPPORTED_TOKENS)).toEqual(['ethereum', 'base', 'sepolia']);
+        it('should have tokens for seven chains', () => {
+            expect(Object.keys(SUPPORTED_TOKENS)).toEqual(['ethereum', 'base', 'arbitrum', 'ronin', 'polygon', 'apechain', 'sepolia']);
         });
 
         describe('ethereum tokens', () => {
@@ -134,10 +134,20 @@ describe('tokens', () => {
                 });
             });
 
-            it('all ETH tokens should be native', () => {
-                Object.values(SUPPORTED_TOKENS).forEach(chainTokens => {
-                    expect(chainTokens.eth.isNative).toBe(true);
+            it('all chains should have a native token', () => {
+                // ethereum, base, arbitrum, sepolia use ETH as native
+                ['ethereum', 'base', 'arbitrum', 'sepolia'].forEach(chain => {
+                    expect(SUPPORTED_TOKENS[chain].eth.isNative).toBe(true);
                 });
+                
+                // ronin uses RON as native
+                expect(SUPPORTED_TOKENS.ronin.ron.isNative).toBe(true);
+                
+                // polygon uses MATIC as native
+                expect(SUPPORTED_TOKENS.polygon.matic.isNative).toBe(true);
+                
+                // apechain uses APE as native
+                expect(SUPPORTED_TOKENS.apechain.ape.isNative).toBe(true);
             });
 
             it('all tokens should have name and symbol', () => {

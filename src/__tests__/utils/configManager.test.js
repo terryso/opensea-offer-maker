@@ -18,7 +18,7 @@ describe('ConfigManager', () => {
             const chains = ConfigManager.getSupportedChains();
 
             expect(Array.isArray(chains)).toBe(true);
-            expect(chains.length).toBe(3);
+            expect(chains.length).toBe(7);
         });
 
         it('should include ethereum chain', () => {
@@ -169,25 +169,35 @@ describe('ConfigManager', () => {
         it('should reject invalid chain name', async () => {
             await expect(ConfigManager.setDefaultChain('invalid'))
                 .rejects
-                .toThrow('Invalid chain: invalid. Supported chains: ethereum, base, sepolia');
+                .toThrow('Invalid chain: invalid. Supported chains: ethereum, base, arbitrum, ronin, polygon, apechain, sepolia');
         });
 
-        it('should reject polygon chain', async () => {
-            await expect(ConfigManager.setDefaultChain('polygon'))
-                .rejects
-                .toThrow('Invalid chain: polygon. Supported chains: ethereum, base, sepolia');
+        it('should accept polygon chain', async () => {
+            let writtenData;
+            ConfigManager._fs = {
+                readFile: async () => { throw new Error('ENOENT'); },
+                writeFile: async (path, data) => { writtenData = data; }
+            };
+
+            const result = await ConfigManager.setDefaultChain('polygon');
+            expect(result).toEqual({ chain: 'polygon' });
         });
 
-        it('should reject arbitrum chain', async () => {
-            await expect(ConfigManager.setDefaultChain('arbitrum'))
-                .rejects
-                .toThrow('Invalid chain: arbitrum. Supported chains: ethereum, base, sepolia');
+        it('should accept arbitrum chain', async () => {
+            let writtenData;
+            ConfigManager._fs = {
+                readFile: async () => { throw new Error('ENOENT'); },
+                writeFile: async (path, data) => { writtenData = data; }
+            };
+
+            const result = await ConfigManager.setDefaultChain('arbitrum');
+            expect(result).toEqual({ chain: 'arbitrum' });
         });
 
         it('should reject optimism chain', async () => {
             await expect(ConfigManager.setDefaultChain('optimism'))
                 .rejects
-                .toThrow('Invalid chain: optimism. Supported chains: ethereum, base, sepolia');
+                .toThrow('Invalid chain: optimism. Supported chains: ethereum, base, arbitrum, ronin, polygon, apechain, sepolia');
         });
 
         it('should reject empty string', async () => {

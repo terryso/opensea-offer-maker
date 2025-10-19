@@ -521,7 +521,11 @@ export class OpenSeaApi {
                 throw new Error('Valid wallet address is required');
             }
 
+            // Use apiChainName for OpenSea API calls
+            // If options.chain is provided, use it directly (assuming it's already the API chain name)
+            // Otherwise use the chainConfig's apiChainName
             const chain = options.chain || this.chainConfig.name;
+            const apiChain = options.chain || this.chainConfig.apiChainName || this.chainConfig.name;
             const limit = Math.min(options.limit || 50, 200); // OpenSea API max is typically 200
             let next = null;
             let allNFTs = [];
@@ -531,7 +535,7 @@ export class OpenSeaApi {
 
             do {
                 // Construct URL based on OpenSea API v2 pattern
-                const url = new URL(`${this.baseUrl}/api/v2/chain/${chain}/account/${walletAddress}/nfts`);
+                const url = new URL(`${this.baseUrl}/api/v2/chain/${apiChain}/account/${walletAddress}/nfts`);
                 url.searchParams.set('limit', limit.toString());
 
                 if (next) {

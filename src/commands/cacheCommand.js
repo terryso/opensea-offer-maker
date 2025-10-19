@@ -44,7 +44,6 @@ refreshCommand.action(async (options) => {
         // Fetch NFTs from OpenSea API (with collection filtering already applied)
         const startTime = Date.now();
         const nfts = await openseaApi.getWalletNFTs(walletAddress, {
-            chain: chainConfig.name,
             onProgress
         });
 

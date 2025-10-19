@@ -38,6 +38,62 @@ export const SUPPORTED_TOKENS = {
             address: '0x4200000000000000000000000000000000000006'
         }
     },
+    'arbitrum': {
+        'eth': {
+            name: 'Arbitrum ETH',
+            symbol: 'ETH',
+            decimals: 18,
+            isNative: true
+        },
+        'weth': {
+            name: 'Wrapped Ether',
+            symbol: 'WETH',
+            decimals: 18,
+            address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1'
+        }
+    },
+    'ronin': {
+        'ron': {
+            name: 'RON',
+            symbol: 'RON',
+            decimals: 18,
+            isNative: true
+        },
+        'weth': {
+            name: 'Wrapped Ether',
+            symbol: 'WETH',
+            decimals: 18,
+            address: '0xc99a6A985eD2Cac1ef41640596C5A5f9F4E19Ef5'
+        }
+    },
+    'polygon': {
+        'matic': {
+            name: 'MATIC',
+            symbol: 'MATIC',
+            decimals: 18,
+            isNative: true
+        },
+        'weth': {
+            name: 'Wrapped Ether',
+            symbol: 'WETH',
+            decimals: 18,
+            address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619'
+        }
+    },
+    'apechain': {
+        'ape': {
+            name: 'APE',
+            symbol: 'APE',
+            decimals: 18,
+            isNative: true
+        },
+        'weth': {
+            name: 'Wrapped Ether',
+            symbol: 'WETH',
+            decimals: 18,
+            address: '0x48b62137EdfA95a428D35C09E44256a739F6B557'
+        }
+    },
     'sepolia': {
         'eth': {
             name: 'Sepolia ETH',

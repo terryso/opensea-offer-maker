@@ -64,10 +64,23 @@ export const getWallet = async (options) => {
 
     // 根据指定的链创建 provider（考虑用户配置的默认链）
     const chainConfig = await getEffectiveChain(options);
-    const provider = new ethers.AlchemyProvider(
-        chainConfig.chain === 'ethereum' ? 'mainnet' : chainConfig.chain,
-        process.env.ALCHEMY_API_KEY
-    );
+    
+    let provider;
+    
+    // 如果链支持 Alchemy,使用 AlchemyProvider
+    if (chainConfig.alchemyNetwork && process.env.ALCHEMY_API_KEY) {
+        provider = new ethers.AlchemyProvider(
+            chainConfig.alchemyNetwork,
+            process.env.ALCHEMY_API_KEY
+        );
+    } else {
+        // 否则使用 JsonRpcProvider
+        const rpcUrl = chainConfig.rpcUrl + (process.env.ALCHEMY_API_KEY || '');
+        provider = new ethers.JsonRpcProvider(rpcUrl, {
+            chainId: chainConfig.chainId,
+            name: chainConfig.name
+        });
+    }
 
     return new ethers.Wallet(privateKey, provider);
 }; 
