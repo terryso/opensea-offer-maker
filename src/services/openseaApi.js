@@ -563,6 +563,11 @@ export class OpenSeaApi {
                 const transformedNFTs = nfts.map(nft => this._transformNFTForCache(nft));
                 allNFTs.push(...transformedNFTs);
 
+                // Debug: Log first NFT to see structure (only in debug mode)
+                if (page === 1 && nfts.length > 0) {
+                    logger.debug('Sample NFT structure from OpenSea API:', JSON.stringify(nfts[0], null, 2));
+                }
+
                 logger.debug(`Fetched ${nfts.length} NFTs on page ${page}, total: ${allNFTs.length}`);
 
                 // Progress callback
@@ -612,19 +617,49 @@ export class OpenSeaApi {
      */
     _transformNFTForCache(nft) {
         // Handle different OpenSea API response formats
-        const contract = nft.contract || nft.asset_contract?.address || '';
+        // OpenSea API v2 format: contract is a string, not an object
+        const contract = typeof nft.contract === 'string' ? nft.contract : (nft.contract?.address || nft.asset_contract?.address || '');
         const tokenId = nft.identifier || nft.token_id || '';
-        const name = nft.name || `${nft.collection?.name || 'Unknown Collection'} #${tokenId}`;
-        const collection = nft.collection?.name || 'Unknown Collection';
-        const collectionSlug = nft.collection?.slug || '';
-        const imageUrl = nft.image_url || nft.image_preview_url || nft.image_thumbnail_url || '';
-        const tokenStandard = nft.asset_contract?.schema_name || nft.token_standard || 'erc721';
+        
+        // Collection info - handle both object and string formats
+        let collectionName = 'Unknown Collection';
+        let collectionSlug = '';
+        
+        if (nft.collection) {
+            if (typeof nft.collection === 'object') {
+                // Older API format: collection is an object with name and slug
+                collectionName = nft.collection.name || 'Unknown Collection';
+                collectionSlug = nft.collection.slug || '';
+            } else if (typeof nft.collection === 'string') {
+                // OpenSea API v2 format: collection field is the slug (string)
+                collectionSlug = nft.collection;
+                // Use slug as name if no explicit name is provided
+                collectionName = nft.collection;
+            }
+        }
+        
+        // Also check for alternative field names
+        if (nft.collection_name) {
+            collectionName = nft.collection_name;
+        }
+        if (nft.collection_slug) {
+            collectionSlug = nft.collection_slug;
+        }
+        
+        // NFT name - use name if available, otherwise generate from collection
+        const name = nft.name || `${collectionName} #${tokenId}`;
+        
+        // Image URL - try multiple possible fields
+        const imageUrl = nft.image_url || nft.display_image_url || nft.image_preview_url || nft.image_thumbnail_url || '';
+        
+        // Token standard
+        const tokenStandard = nft.token_standard || nft.asset_contract?.schema_name || 'erc721';
 
         return {
             contract,
             tokenId,
             name,
-            collection,
+            collection: collectionName,
             collectionSlug,
             imageUrl,
             tokenStandard: tokenStandard.toLowerCase()
