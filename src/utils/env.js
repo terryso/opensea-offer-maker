@@ -7,4 +7,7 @@ export const {
     ALCHEMY_API_KEY,
     PRIVATE_KEY,
     CACHE_EXPIRY_HOURS
-} = process.env; 
+} = process.env;
+
+// OpenSea Base URL with fallback
+export const OPENSEA_BASE_URL = process.env.OPENSEA_BASE_URL || 'https://api.opensea.io'; 

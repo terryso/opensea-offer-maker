@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js';
 import { OPENSEA_API_KEY } from '../config.js';
 import { addChainOption, getEffectiveChain } from '../utils/commandUtils.js';
 import { StreamService } from '../services/streamService.js';
+import { PollingMonitorService } from '../services/pollingMonitorService.js';
 import { NotificationService } from '../services/notificationService.js';
 import { KeyManager } from '../utils/keyManager.js';
 import { ethers } from 'ethers';
@@ -16,6 +17,7 @@ const startCommand = new Command('start')
     .option('--collections <slugs>', 'Comma-separated collection slugs to monitor')
     .option('--all-collections', 'Monitor all collections (wildcard)')
     .option('--verbosity <level>', 'Display verbosity: minimal, normal, detailed', 'normal')
+    .option('--mode <mode>', 'Monitoring mode: stream or polling', process.env.MONITOR_MODE || 'polling')
     .action(async (options) => {
         try {
             // Get effective chain configuration
@@ -30,11 +32,27 @@ const startCommand = new Command('start')
             const verbosity = options.verbosity || process.env.MONITOR_VERBOSITY || 'normal';
             const notificationService = new NotificationService({ verbosity });
 
-            const streamService = new StreamService({
-                apiKey: OPENSEA_API_KEY,
-                network: (chainConfig.name === 'sepolia') ? 'testnet' : 'mainnet',
-                walletAddress
-            });
+            // Determine monitoring mode
+            const mode = options.mode || 'polling';
+            logger.info(`Using monitoring mode: ${mode}`);
+
+            // Initialize appropriate service based on mode
+            let monitorService;
+            if (mode === 'stream') {
+                monitorService = new StreamService({
+                    apiKey: OPENSEA_API_KEY,
+                    network: (chainConfig.name === 'sepolia') ? 'testnet' : 'mainnet',
+                    walletAddress
+                });
+            } else if (mode === 'polling') {
+                monitorService = new PollingMonitorService({
+                    apiKey: OPENSEA_API_KEY,
+                    network: (chainConfig.name === 'sepolia') ? 'testnet' : 'mainnet',
+                    chainConfig: chainConfig
+                });
+            } else {
+                throw new Error(`Invalid monitoring mode: ${mode}. Use 'stream' or 'polling'`);
+            }
 
             // Determine which collections to monitor
             const collections = options.allCollections
@@ -43,8 +61,8 @@ const startCommand = new Command('start')
                     ? options.collections.split(',').map(s => s.trim())
                     : ['*'];  // default to wildcard if neither flag specified
 
-            // Connect to stream first
-            await streamService.connect();
+            // Connect to monitor service
+            await monitorService.connect();
 
             // Set up event callback
             const eventCallback = async (event) => {
@@ -62,7 +80,7 @@ const startCommand = new Command('start')
             ];
 
             for (const collection of collections) {
-                await streamService.subscribeToCollection(
+                await monitorService.subscribeToCollection(
                     collection,
                     eventTypes,
                     eventCallback,
@@ -71,11 +89,17 @@ const startCommand = new Command('start')
             }
 
             // Display monitoring info
-            logger.info('Connected to OpenSea Stream API');
+            const apiInfo = mode === 'stream' ? 'OpenSea Stream API (WebSocket)' : 'OpenSea REST API (Polling)';
+            logger.info(`Connected to ${apiInfo}`);
             logger.info(`Monitoring wallet: ${walletAddress}`);
             logger.info(`Chain: ${chainConfig.name}`);
+            logger.info(`Mode: ${mode}`);
             logger.info(`Collections: ${collections.join(', ')}`);
             logger.info(`Verbosity: ${verbosity}`);
+            if (mode === 'polling') {
+                const interval = monitorService.config.pollingInterval / 1000;
+                logger.info(`Polling interval: ${interval}s`);
+            }
             logger.info('\nMonitoring started. Press Ctrl+C to stop.\n');
 
             // Set up graceful shutdown handlers
@@ -88,8 +112,8 @@ const startCommand = new Command('start')
                 logger.info('\nShutting down gracefully...');
 
                 try {
-                    await streamService.disconnect();
-                    logger.info('Disconnected from OpenSea Stream API');
+                    await monitorService.disconnect();
+                    logger.info(`Disconnected from ${apiInfo}`);
                     process.exit(0);
                 } catch (error) {
                     logger.error('Error during shutdown:', error.message);

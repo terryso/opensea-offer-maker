@@ -516,7 +516,10 @@ export class OpenSeaApi {
 
             // Build consideration array: seller + OpenSea fee + creator fees
             const consideration = [];
-            let totalFees = openseaFeeAmount;
+            let totalFees = BigInt(0);
+
+            // Track if OpenSea fee is already included in creator fees
+            let openseaFeeIncludedInCreatorFees = false;
 
             // Add creator royalties if available
             if (feeInfo) {
@@ -530,6 +533,12 @@ export class OpenSeaApi {
                             recipient: fee.recipient,
                         });
                         logger.debug(`Adding required creator fee: ${fee.percent}% to ${fee.recipient}`);
+
+                        // Check if creator fee recipient is the same as OpenSea fee recipient
+                        if (fee.recipient.toLowerCase() === openseaFeeRecipient.toLowerCase()) {
+                            openseaFeeIncludedInCreatorFees = true;
+                            logger.debug('OpenSea fee recipient found in creator fees, will not add separate OpenSea fee');
+                        }
                     });
                 }
 
@@ -543,10 +552,28 @@ export class OpenSeaApi {
                             recipient: fee.recipient,
                         });
                         logger.info(`Including optional creator fee: ${fee.percent}% to ${fee.recipient}`);
+
+                        // Check if creator fee recipient is the same as OpenSea fee recipient
+                        if (fee.recipient.toLowerCase() === openseaFeeRecipient.toLowerCase()) {
+                            openseaFeeIncludedInCreatorFees = true;
+                            logger.debug('OpenSea fee recipient found in optional creator fees, will not add separate OpenSea fee');
+                        }
                     });
                 } else if (feeInfo.hasOptionalCreatorFees) {
                     logger.info(`Skipping optional creator fees (${feeInfo.optionalCreatorFeePercent}%)`);
                 }
+            }
+
+            // Add OpenSea fee only if it's not already included in creator fees
+            if (!openseaFeeIncludedInCreatorFees) {
+                totalFees += openseaFeeAmount;
+                consideration.push({
+                    amount: openseaFeeAmount.toString(),
+                    recipient: openseaFeeRecipient,
+                });
+                logger.debug('Adding separate OpenSea platform fee');
+            } else {
+                logger.info('OpenSea fee already included in creator fees, not adding separately');
             }
 
             // Calculate seller's net amount (price - all fees)
@@ -556,12 +583,6 @@ export class OpenSeaApi {
             consideration.unshift({
                 amount: sellerAmount.toString(),
                 recipient: walletAddress,
-            });
-
-            // Add OpenSea fee
-            consideration.push({
-                amount: openseaFeeAmount.toString(),
-                recipient: openseaFeeRecipient,
             });
 
             logger.info('Creating order with Seaport.js...');
@@ -795,5 +816,107 @@ export class OpenSeaApi {
             imageUrl,
             tokenStandard: tokenStandard.toLowerCase()
         };
+    }
+
+    /**
+     * Get events for a specific account (wallet address)
+     *
+     * @param {string} address - Wallet address to get events for
+     * @param {Object} filters - Optional filters
+     * @param {string} filters.eventType - Event type: 'all', 'sale', 'transfer', 'order', 'cancel', 'redemption'
+     * @param {number} filters.after - Unix timestamp to filter events after this time
+     * @param {string} filters.next - Cursor for pagination
+     * @param {number} filters.limit - Maximum number of results (default: 50, max: 100)
+     * @returns {Promise<Object>} Events response with asset_events array and next cursor
+     */
+    async getAccountEvents(address, filters = {}) {
+        try {
+            const url = new URL(`${this.baseUrl}/api/v2/events/accounts/${address}`);
+
+            // Add optional filters
+            if (filters.eventType && filters.eventType !== 'all') {
+                url.searchParams.append('event_type', filters.eventType);
+            }
+
+            if (filters.after) {
+                url.searchParams.append('after', filters.after.toString());
+            }
+
+            if (filters.next) {
+                url.searchParams.append('next', filters.next);
+            }
+
+            // Limit: default 50, max 100
+            const limit = Math.min(filters.limit || 50, 100);
+            url.searchParams.append('limit', limit.toString());
+
+            logger.debug('Fetching account events:', url.toString());
+
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
+            logger.debug(`Account events response: ${response?.asset_events?.length || 0} events`);
+
+            return response;
+        } catch (error) {
+            logger.error('Failed to fetch account events:', error.message);
+            return { asset_events: [], next: null };
+        }
+    }
+
+    /**
+     * Get events for a specific collection
+     *
+     * @param {string} collectionSlug - Collection slug to get events for
+     * @param {Object} filters - Optional filters
+     * @param {string} filters.eventType - Event type: 'all', 'sale', 'transfer', 'order', 'cancel', 'redemption'
+     * @param {number} filters.after - Unix timestamp to filter events after this time
+     * @param {string} filters.next - Cursor for pagination
+     * @param {number} filters.limit - Maximum number of results (default: 50, max: 100)
+     * @returns {Promise<Object>} Events response with asset_events array and next cursor
+     */
+    async getCollectionEvents(collectionSlug, filters = {}) {
+        try {
+            const url = new URL(`${this.baseUrl}/api/v2/events/collection/${collectionSlug}`);
+
+            // Add optional filters
+            if (filters.eventType && filters.eventType !== 'all') {
+                url.searchParams.append('event_type', filters.eventType);
+            }
+
+            if (filters.after) {
+                url.searchParams.append('after', filters.after.toString());
+            }
+
+            if (filters.next) {
+                url.searchParams.append('next', filters.next);
+            }
+
+            // Limit: default 50, max 100
+            const limit = Math.min(filters.limit || 50, 100);
+            url.searchParams.append('limit', limit.toString());
+
+            logger.debug('Fetching collection events:', url.toString());
+
+            const response = await this.fetchWithRetry(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-API-KEY': this.apiKey
+                }
+            });
+
+            logger.debug(`Collection events response: ${response?.asset_events?.length || 0} events`);
+
+            return response;
+        } catch (error) {
+            logger.error('Failed to fetch collection events:', error.message);
+            return { asset_events: [], next: null };
+        }
     }
 } 

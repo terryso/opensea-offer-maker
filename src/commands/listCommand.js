@@ -108,7 +108,7 @@ listCommand.action(async (options) => {
                     `${timeValue} minutes`;
 
                 // Run interactive flow with back navigation support
-                const { selectedNFT, pricingChoice, feeInfo, payOptionalRoyalties } = await runInteractiveFlow(cacheData, openseaApi, {
+                const { selectedNFT, pricingChoice, feeInfo, payOptionalRoyalties, listingPrice, pricingInfo } = await runInteractiveFlow(cacheData, openseaApi, {
                     walletAddress,
                     chainConfig,
                     marketplaces: marketplaces.join(', '),
@@ -119,20 +119,16 @@ listCommand.action(async (options) => {
                 options.address = selectedNFT.contract;
                 options.tokenId = selectedNFT.tokenId;
 
-                // Set pricing option based on interactive choice
-                if (pricingChoice.type === 'absolute') {
-                    options.price = pricingChoice.value;
-                } else if (pricingChoice.type === 'floor-diff') {
-                    options.floorDiff = pricingChoice.value;
-                } else if (pricingChoice.type === 'profit-margin') {
-                    options.profitMargin = pricingChoice.value;
-                } else if (pricingChoice.type === 'profit-percent') {
-                    options.profitPercent = pricingChoice.value;
-                }
+                // Store calculated price from interactive flow (already computed, no need to recalculate)
+                options.calculatedPrice = listingPrice;
+                options.pricingInfo = pricingInfo;
 
                 // Store fee info and payment preference for createListing
                 options.feeInfo = feeInfo;
                 options.payOptionalRoyalties = payOptionalRoyalties;
+
+                // Skip confirmation step since interactive flow already confirmed
+                options.skipConfirm = true;
 
             } catch (error) {
                 logger.error('Interactive flow error:', error.message);
@@ -173,7 +169,11 @@ listCommand.action(async (options) => {
         let listingPrice;
         let pricingInfo = ''; // Used to display pricing basis
 
-        if (options.price) {
+        // If interactive mode, use the already calculated price
+        if (options.calculatedPrice) {
+            listingPrice = options.calculatedPrice;
+            pricingInfo = options.pricingInfo || '';
+        } else if (options.price) {
             // Use absolute price
             listingPrice = parseFloat(options.price);
         } else if (options.floorDiff) {
@@ -321,9 +321,12 @@ listCommand.action(async (options) => {
         });
 
         logger.info('\n✅ Listing created successfully!');
-        logger.info(`Order hash: ${listing.order_hash || listing.orderHash || 'N/A'}`);
-        
-        // Display links
+
+        // Extract order hash from response (it's nested under order.order_hash)
+        const orderHash = listing?.order?.order_hash || listing?.order_hash || listing?.orderHash || 'N/A';
+        logger.info(`Order hash: ${orderHash}`);
+
+        // Display NFT link on OpenSea
         logger.info(`\n🔗 View on OpenSea:`);
         logger.info(`   https://opensea.io/assets/${chainConfig.chain}/${options.address}/${options.tokenId}`);
 
@@ -455,7 +458,7 @@ async function selectNFTStep(nftsInCollection, collectionName) {
  * @param {Object} cacheData - Cache data with NFTs
  * @param {OpenSeaApi} openseaApi - OpenSea API instance
  * @param {Object} config - Additional configuration (walletAddress, chainConfig, marketplaces, expirationDisplay)
- * @returns {Object} { selectedNFT, pricingChoice: { type, value } }
+ * @returns {Object} { selectedNFT, pricingChoice: { type, value }, feeInfo, payOptionalRoyalties, listingPrice, pricingInfo }
  * @throws {Error} If user cancels the flow
  */
 async function runInteractiveFlow(cacheData, openseaApi, config) {
@@ -484,6 +487,8 @@ async function runInteractiveFlow(cacheData, openseaApi, config) {
     let pricingValue = null;
     let feeInfo = null;
     let payOptionalRoyalties = config.payOptionalRoyalties || false;
+    let calculatedListingPrice = null;
+    let calculatedPricingInfo = null;
 
     while (currentStep !== FLOW_STEPS.DONE && currentStep !== FLOW_STEPS.CANCELLED) {
         if (currentStep === FLOW_STEPS.SELECT_COLLECTION) {
@@ -596,9 +601,11 @@ async function runInteractiveFlow(cacheData, openseaApi, config) {
             const result = await confirmListingStep(listingInfo);
 
             if (result === true) {
-                // Save fee information for listing creation
+                // Save fee information and calculated price for listing creation
                 feeInfo = feeBreakdown.feeInfo;
                 payOptionalRoyalties = shouldPayOptionalRoyalties;
+                calculatedListingPrice = listingPrice;
+                calculatedPricingInfo = pricingInfo;
                 currentStep = FLOW_STEPS.DONE;
             } else if (result === BACK_SIGNAL) {
                 // Go back to pricing method selection
@@ -622,7 +629,9 @@ async function runInteractiveFlow(cacheData, openseaApi, config) {
             value: pricingValue
         },
         feeInfo,
-        payOptionalRoyalties
+        payOptionalRoyalties,
+        listingPrice: calculatedListingPrice,
+        pricingInfo: calculatedPricingInfo
     };
 }
 
