@@ -620,13 +620,16 @@ export class OpenSeaApi {
             // 提交到 OpenSea API
             const url = `${this.baseUrl}/api/v2/orders/${this.chainConfig.chain}/seaport/listings`;
             
+            // Use Seaport 1.6 protocol address (deployed on all chains)
+            const seaportProtocolAddress = '0x0000000000000068F116a894984e2DB1123eB395';
+
             const response = await this.axiosInstance({
                 url,
                 method: 'POST',
                 data: {
                     parameters: order.parameters,
                     signature: order.signature,
-                    protocol_address: '0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC'
+                    protocol_address: seaportProtocolAddress
                 }
             });
 
