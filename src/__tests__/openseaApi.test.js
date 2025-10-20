@@ -831,5 +831,433 @@ describe('OpenSeaApi', () => {
                 tokenStandard: 'erc721'
             });
         });
+
+        it('should handle string collection field (OpenSea API v2)', () => {
+            const v2NFT = {
+                contract: '0xabc',
+                identifier: '999',
+                collection: 'my-collection-slug',
+                image_url: 'https://example.com/img.png',
+                token_standard: 'ERC721'
+            };
+
+            const result = api._transformNFTForCache(v2NFT);
+
+            expect(result).toEqual({
+                contract: '0xabc',
+                tokenId: '999',
+                name: 'my-collection-slug #999',
+                collection: 'my-collection-slug',
+                collectionSlug: 'my-collection-slug',
+                imageUrl: 'https://example.com/img.png',
+                tokenStandard: 'erc721'
+            });
+        });
+
+        it('should use collection_name and collection_slug fields', () => {
+            const nft = {
+                contract: '0xdef',
+                identifier: '111',
+                collection: 'slug-value',
+                collection_name: 'Proper Collection Name',
+                collection_slug: 'proper-slug',
+                image_url: 'https://example.com/proper.png',
+                token_standard: 'ERC1155'
+            };
+
+            const result = api._transformNFTForCache(nft);
+
+            expect(result).toEqual({
+                contract: '0xdef',
+                tokenId: '111',
+                name: 'Proper Collection Name #111',
+                collection: 'Proper Collection Name',
+                collectionSlug: 'proper-slug',
+                imageUrl: 'https://example.com/proper.png',
+                tokenStandard: 'erc1155'
+            });
+        });
+
+        it('should use display_image_url and image_thumbnail_url as fallbacks', () => {
+            const nft1 = {
+                contract: '0x111',
+                identifier: '1',
+                display_image_url: 'https://example.com/display.png',
+                token_standard: 'ERC721'
+            };
+
+            const result1 = api._transformNFTForCache(nft1);
+            expect(result1.imageUrl).toBe('https://example.com/display.png');
+
+            const nft2 = {
+                contract: '0x222',
+                identifier: '2',
+                image_thumbnail_url: 'https://example.com/thumb.png',
+                token_standard: 'ERC721'
+            };
+
+            const result2 = api._transformNFTForCache(nft2);
+            expect(result2.imageUrl).toBe('https://example.com/thumb.png');
+        });
+    });
+
+    describe('getCollectionByContract', () => {
+        it('should fetch collection by contract address', async () => {
+            const mockResponse = {
+                collection: 'test-collection',
+                name: 'Test Collection'
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getCollectionByContract('0x123');
+            expect(result).toEqual(mockResponse);
+            expect(mockAxiosInstance).toHaveBeenCalled();
+        });
+
+        it('should return null on error', async () => {
+            mockAxiosInstance.mockRejectedValue(new Error('API Error'));
+
+            const result = await api.getCollectionByContract('0x123');
+            expect(result).toBe(null);
+        });
+    });
+
+    describe('getCollectionFees', () => {
+        it('should fetch and parse collection fees with required creator fees', async () => {
+            const mockCollectionInfo = {
+                fees: [
+                    { fee: 2.5, recipient: '0xCreator1', required: true },
+                    { fee: 1.0, recipient: '0xCreator2', required: true }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockCollectionInfo
+            });
+
+            const result = await api.getCollectionFees('test-collection');
+
+            expect(result).toEqual({
+                openseaFeePercent: 1.0,
+                requiredCreatorFeePercent: 3.5,
+                optionalCreatorFeePercent: 0,
+                totalCreatorFeePercent: 3.5,
+                requiredCreatorFees: [
+                    { percent: 2.5, recipient: '0xCreator1', required: true },
+                    { percent: 1.0, recipient: '0xCreator2', required: true }
+                ],
+                optionalCreatorFees: [],
+                hasRequiredCreatorFees: true,
+                hasOptionalCreatorFees: false,
+                creatorFeePercent: 3.5,
+                creatorFees: [
+                    { percent: 2.5, recipient: '0xCreator1', required: true },
+                    { percent: 1.0, recipient: '0xCreator2', required: true }
+                ],
+                totalFeePercent: 4.5,
+                hasCreatorFees: true
+            });
+        });
+
+        it('should handle optional creator fees', async () => {
+            const mockCollectionInfo = {
+                fees: [
+                    { fee: 2.5, recipient: '0xCreator1', required: true },
+                    { fee: 1.0, recipient: '0xCreator2', required: false }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockCollectionInfo
+            });
+
+            const result = await api.getCollectionFees('test-collection');
+
+            expect(result.requiredCreatorFeePercent).toBe(2.5);
+            expect(result.optionalCreatorFeePercent).toBe(1.0);
+            expect(result.totalCreatorFeePercent).toBe(3.5);
+            expect(result.hasRequiredCreatorFees).toBe(true);
+            expect(result.hasOptionalCreatorFees).toBe(true);
+            expect(result.requiredCreatorFees).toHaveLength(1);
+            expect(result.optionalCreatorFees).toHaveLength(1);
+        });
+
+        it('should handle no creator fees', async () => {
+            const mockCollectionInfo = {
+                fees: []
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockCollectionInfo
+            });
+
+            const result = await api.getCollectionFees('test-collection');
+
+            expect(result.requiredCreatorFeePercent).toBe(0);
+            expect(result.optionalCreatorFeePercent).toBe(0);
+            expect(result.totalCreatorFeePercent).toBe(0);
+            expect(result.hasRequiredCreatorFees).toBe(false);
+            expect(result.hasOptionalCreatorFees).toBe(false);
+            expect(result.totalFeePercent).toBe(1.0); // Only OpenSea fee
+        });
+
+        it('should handle missing fees array', async () => {
+            const mockCollectionInfo = {};
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockCollectionInfo
+            });
+
+            const result = await api.getCollectionFees('test-collection');
+
+            expect(result.totalCreatorFeePercent).toBe(0);
+            expect(result.hasCreatorFees).toBe(false);
+        });
+
+        it('should handle null collection info', async () => {
+            mockAxiosInstance.mockResolvedValue({
+                data: null
+            });
+
+            const result = await api.getCollectionFees('test-collection');
+
+            expect(result).toBe(null);
+        });
+
+        it('should return null on error', async () => {
+            mockAxiosInstance.mockRejectedValue(new Error('API Error'));
+
+            const result = await api.getCollectionFees('test-collection');
+            expect(result).toBe(null);
+        });
+
+        it('should skip fees without fee property', async () => {
+            const mockCollectionInfo = {
+                fees: [
+                    { fee: 2.5, recipient: '0xCreator1', required: true },
+                    { recipient: '0xNoFee', required: true }, // Missing fee
+                    { fee: null, recipient: '0xNullFee', required: false } // Null fee
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockCollectionInfo
+            });
+
+            const result = await api.getCollectionFees('test-collection');
+
+            expect(result.requiredCreatorFeePercent).toBe(2.5);
+            expect(result.requiredCreatorFees).toHaveLength(1);
+            expect(result.optionalCreatorFees).toHaveLength(0);
+        });
+    });
+
+    describe('getListingByTokenId', () => {
+        it('should fetch and return listing by token ID', async () => {
+            const mockResponse = {
+                orders: [
+                    {
+                        current_price: '1000000000000000000',
+                        maker: { address: '0xSeller' },
+                        protocol_data: {}
+                    }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getListingByTokenId('0xContract', '123');
+
+            expect(result).toBeDefined();
+            expect(result.price_value).toBe('1000000000000000000');
+            expect(result.price).toBe(1.0);
+        });
+
+        it('should return null when no listings exist', async () => {
+            const mockResponse = {
+                orders: []
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getListingByTokenId('0xContract', '123');
+            expect(result).toBe(null);
+        });
+
+        it('should return null on error', async () => {
+            mockAxiosInstance.mockRejectedValue(new Error('API Error'));
+
+            const result = await api.getListingByTokenId('0xContract', '123');
+            expect(result).toBe(null);
+        });
+
+        it('should handle listing without current_price', async () => {
+            const mockResponse = {
+                orders: [
+                    {
+                        maker: { address: '0xSeller' },
+                        protocol_data: {}
+                    }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getListingByTokenId('0xContract', '123');
+            expect(result).toBeDefined();
+            expect(result.price_value).toBeUndefined();
+            expect(result.price).toBeUndefined();
+        });
+    });
+
+    describe('getNFTLastSalePrice', () => {
+        it('should fetch and return last sale price', async () => {
+            const mockResponse = {
+                asset_events: [
+                    {
+                        event_timestamp: '2024-01-01T00:00:00Z',
+                        payment: {
+                            quantity: '2000000000000000000'
+                        },
+                        from_address: '0xSeller',
+                        to_address: '0xBuyer',
+                        transaction: '0xTxHash'
+                    }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getNFTLastSalePrice('0xContract', '123');
+
+            expect(result).toEqual({
+                price: 2.0,
+                eventTimestamp: '2024-01-01T00:00:00Z',
+                fromAddress: '0xSeller',
+                toAddress: '0xBuyer',
+                transaction: '0xTxHash'
+            });
+        });
+
+        it('should return null when no sale events exist', async () => {
+            const mockResponse = {
+                asset_events: []
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getNFTLastSalePrice('0xContract', '123');
+            expect(result).toBe(null);
+        });
+
+        it('should return null when no payment information exists', async () => {
+            const mockResponse = {
+                asset_events: [
+                    {
+                        event_timestamp: '2024-01-01T00:00:00Z',
+                        from_address: '0xSeller',
+                        to_address: '0xBuyer'
+                    }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getNFTLastSalePrice('0xContract', '123');
+            expect(result).toBe(null);
+        });
+
+        it('should return null on error', async () => {
+            mockAxiosInstance.mockRejectedValue(new Error('API Error'));
+
+            const result = await api.getNFTLastSalePrice('0xContract', '123');
+            expect(result).toBe(null);
+        });
+
+        it('should handle payment with value field', async () => {
+            const mockResponse = {
+                asset_events: [
+                    {
+                        event_timestamp: '2024-01-01T00:00:00Z',
+                        payment: {
+                            value: '3000000000000000000'
+                        }
+                    }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getNFTLastSalePrice('0xContract', '123');
+            expect(result.price).toBe(3.0);
+        });
+
+        it('should use seller and winner_account fields as fallbacks', async () => {
+            const mockResponse = {
+                asset_events: [
+                    {
+                        event_timestamp: '2024-01-01T00:00:00Z',
+                        payment: {
+                            quantity: '1000000000000000000'
+                        },
+                        seller: '0xSellerAlt',
+                        winner_account: { address: '0xWinner' }
+                    }
+                ]
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockResponse
+            });
+
+            const result = await api.getNFTLastSalePrice('0xContract', '123');
+            expect(result.fromAddress).toBe('0xSellerAlt');
+            expect(result.toAddress).toBe('0xWinner');
+        });
+    });
+
+    describe('getCollectionStats error handling', () => {
+        it('should throw error when floor price is missing', async () => {
+            const mockStats = {
+                total: {}
+            };
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockStats
+            });
+
+            await expect(api.getCollectionStats('test-collection'))
+                .rejects
+                .toThrow('Floor price not available');
+        });
+
+        it('should throw error when total is missing', async () => {
+            const mockStats = {};
+
+            mockAxiosInstance.mockResolvedValue({
+                data: mockStats
+            });
+
+            await expect(api.getCollectionStats('test-collection'))
+                .rejects
+                .toThrow('Floor price not available');
+        });
     });
 }); 

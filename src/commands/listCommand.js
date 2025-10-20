@@ -33,6 +33,7 @@ export const listCommand = new Command('list')
     .option('--profit-percent <percent>', 'Profit percentage over last purchase price (e.g., 10 for +10%)')
     .option('-e, --expiration <time>', 'Expiration time (e.g., 30d, 12h, 45m)', '1h')
     .option('-m, --marketplaces <markets>', 'Comma-separated list of marketplaces (only opensea supported)', 'opensea')
+    .option('--pay-optional-royalties', 'Pay optional creator royalties (default: skip optional fees)')
     .option('--skip-confirm', 'Skip listing confirmation')
     .option('--debug', 'Enable debug logging');
 
@@ -107,11 +108,12 @@ listCommand.action(async (options) => {
                     `${timeValue} minutes`;
 
                 // Run interactive flow with back navigation support
-                const { selectedNFT, pricingChoice } = await runInteractiveFlow(cacheData, openseaApi, {
+                const { selectedNFT, pricingChoice, feeInfo, payOptionalRoyalties } = await runInteractiveFlow(cacheData, openseaApi, {
                     walletAddress,
                     chainConfig,
                     marketplaces: marketplaces.join(', '),
-                    expirationDisplay
+                    expirationDisplay,
+                    payOptionalRoyalties: options.payOptionalRoyalties || false
                 });
 
                 options.address = selectedNFT.contract;
@@ -127,6 +129,10 @@ listCommand.action(async (options) => {
                 } else if (pricingChoice.type === 'profit-percent') {
                     options.profitPercent = pricingChoice.value;
                 }
+
+                // Store fee info and payment preference for createListing
+                options.feeInfo = feeInfo;
+                options.payOptionalRoyalties = payOptionalRoyalties;
 
             } catch (error) {
                 logger.error('Interactive flow error:', error.message);
@@ -265,6 +271,27 @@ listCommand.action(async (options) => {
             timeUnit === 'h' ? `${timeValue} hours` :
             `${timeValue} minutes`;
 
+        // Determine if we should pay optional royalties
+        const payOptionalRoyalties = options.payOptionalRoyalties || false;
+
+        // Get collection slug and fee information for listing creation
+        let collectionSlug = null;
+        let feeBreakdown = null;
+        try {
+            const collectionData = await openseaApi.getCollectionByContract(options.address);
+            if (collectionData && collectionData.collection) {
+                collectionSlug = collectionData.collection;
+                feeBreakdown = await calculateFeeBreakdown(
+                    listingPrice,
+                    collectionSlug,
+                    openseaApi,
+                    payOptionalRoyalties
+                );
+            }
+        } catch (error) {
+            logger.warn('Could not fetch fee information:', error.message);
+        }
+
         // Show listing confirmation (unless skipped)
         if (!options.skipConfirm) {
             await confirmListing({
@@ -275,19 +302,22 @@ listCommand.action(async (options) => {
                 expiration: expirationDisplay,
                 marketplaces: marketplaces.join(', '),
                 wallet: walletAddress,
-                chain: chainConfig.name
+                chain: chainConfig.name,
+                feeBreakdown: feeBreakdown
             });
         }
 
         logger.info('Creating OpenSea listing...');
-        
+
         const listing = await openseaApi.createListing({
             contractAddress: options.address,
             tokenId: options.tokenId,
             price: listingPrice,
             expirationTime: expirationTime,
             wallet: wallet,
-            walletAddress: walletAddress
+            walletAddress: walletAddress,
+            feeInfo: feeBreakdown?.feeInfo || null,
+            payOptionalRoyalties: payOptionalRoyalties
         });
 
         logger.info('\n✅ Listing created successfully!');
@@ -452,6 +482,8 @@ async function runInteractiveFlow(cacheData, openseaApi, config) {
     let selectedNFT = null;
     let pricingMethod = null;
     let pricingValue = null;
+    let feeInfo = null;
+    let payOptionalRoyalties = config.payOptionalRoyalties || false;
 
     while (currentStep !== FLOW_STEPS.DONE && currentStep !== FLOW_STEPS.CANCELLED) {
         if (currentStep === FLOW_STEPS.SELECT_COLLECTION) {
@@ -527,6 +559,27 @@ async function runInteractiveFlow(cacheData, openseaApi, config) {
                 selectedNFT.tokenId
             );
 
+            // Use the payOptionalRoyalties value from config (command line parameter)
+            const shouldPayOptionalRoyalties = config.payOptionalRoyalties || false;
+
+            // Calculate fee breakdown with the determined optional royalties setting
+            const feeBreakdown = await calculateFeeBreakdown(
+                listingPrice,
+                selectedNFT.collectionSlug,
+                openseaApi,
+                shouldPayOptionalRoyalties
+            );
+
+            // Inform user about optional fees if they exist
+            if (feeBreakdown.hasOptionalCreatorFees) {
+                if (shouldPayOptionalRoyalties) {
+                    logger.info(`\n✅ Optional creator royalties (${feeBreakdown.optionalCreatorFeePercent}%) will be included`);
+                } else {
+                    logger.info(`\n⏭️  Optional creator royalties (${feeBreakdown.optionalCreatorFeePercent}%) will be skipped (save ${feeBreakdown.optionalCreatorFeeAmount.toFixed(6)} ETH)`);
+                    logger.info('💡 Use --pay-optional-royalties to include them');
+                }
+            }
+
             const listingInfo = {
                 contractAddress: selectedNFT.contract,
                 tokenId: selectedNFT.tokenId,
@@ -535,12 +588,17 @@ async function runInteractiveFlow(cacheData, openseaApi, config) {
                 expiration: config.expirationDisplay,
                 marketplaces: config.marketplaces,
                 wallet: config.walletAddress,
-                chain: config.chainConfig.name
+                chain: config.chainConfig.name,
+                feeBreakdown: feeBreakdown,
+                payOptionalRoyalties: shouldPayOptionalRoyalties
             };
 
             const result = await confirmListingStep(listingInfo);
 
             if (result === true) {
+                // Save fee information for listing creation
+                feeInfo = feeBreakdown.feeInfo;
+                payOptionalRoyalties = shouldPayOptionalRoyalties;
                 currentStep = FLOW_STEPS.DONE;
             } else if (result === BACK_SIGNAL) {
                 // Go back to pricing method selection
@@ -562,7 +620,9 @@ async function runInteractiveFlow(cacheData, openseaApi, config) {
         pricingChoice: {
             type: pricingMethod,
             value: pricingValue
-        }
+        },
+        feeInfo,
+        payOptionalRoyalties
     };
 }
 
@@ -1045,6 +1105,107 @@ async function calculateListingPrice(method, value, openseaApi, contractAddress,
 }
 
 /**
+ * Calculate fee breakdown and net proceeds for a listing
+ * @param {number} listingPrice - Listing price in ETH
+ * @param {string} collectionSlug - Collection slug
+ * @param {OpenSeaApi} openseaApi - OpenSea API instance
+ * @param {boolean} payOptionalRoyalties - Whether to include optional creator fees
+ * @returns {Object} Fee information including net proceeds and raw feeInfo
+ */
+async function calculateFeeBreakdown(listingPrice, collectionSlug, openseaApi, payOptionalRoyalties = false) {
+    try {
+        // Get collection fees
+        const feeInfo = await openseaApi.getCollectionFees(collectionSlug);
+
+        if (!feeInfo) {
+            // Fallback to default OpenSea fee only if API fails
+            logger.warn('Could not fetch collection fees, using default OpenSea fee only');
+            const openseaFeePercent = 1.0;
+            const openseaFeeAmount = listingPrice * (openseaFeePercent / 100);
+            const netProceeds = listingPrice - openseaFeeAmount;
+
+            return {
+                openseaFeePercent,
+                openseaFeeAmount,
+                requiredCreatorFeePercent: 0,
+                requiredCreatorFeeAmount: 0,
+                optionalCreatorFeePercent: 0,
+                optionalCreatorFeeAmount: 0,
+                creatorFeePercent: 0,
+                creatorFeeAmount: 0,
+                totalFeePercent: openseaFeePercent,
+                totalFeeAmount: openseaFeeAmount,
+                netProceeds,
+                hasRequiredCreatorFees: false,
+                hasOptionalCreatorFees: false,
+                hasCreatorFees: false,
+                feeInfo: null,
+                payOptionalRoyalties: false
+            };
+        }
+
+        // Calculate fee amounts in ETH
+        const openseaFeeAmount = listingPrice * (feeInfo.openseaFeePercent / 100);
+        const requiredCreatorFeeAmount = listingPrice * (feeInfo.requiredCreatorFeePercent / 100);
+        const optionalCreatorFeeAmount = listingPrice * (feeInfo.optionalCreatorFeePercent / 100);
+
+        // Determine which fees to include
+        const actualCreatorFeePercent = feeInfo.requiredCreatorFeePercent +
+            (payOptionalRoyalties ? feeInfo.optionalCreatorFeePercent : 0);
+        const actualCreatorFeeAmount = requiredCreatorFeeAmount +
+            (payOptionalRoyalties ? optionalCreatorFeeAmount : 0);
+
+        const totalFeePercent = feeInfo.openseaFeePercent + actualCreatorFeePercent;
+        const totalFeeAmount = openseaFeeAmount + actualCreatorFeeAmount;
+        const netProceeds = listingPrice - totalFeeAmount;
+
+        return {
+            openseaFeePercent: feeInfo.openseaFeePercent,
+            openseaFeeAmount,
+            requiredCreatorFeePercent: feeInfo.requiredCreatorFeePercent,
+            requiredCreatorFeeAmount,
+            optionalCreatorFeePercent: feeInfo.optionalCreatorFeePercent,
+            optionalCreatorFeeAmount,
+            creatorFeePercent: actualCreatorFeePercent,
+            creatorFeeAmount: actualCreatorFeeAmount,
+            totalFeePercent,
+            totalFeeAmount,
+            netProceeds,
+            hasRequiredCreatorFees: feeInfo.hasRequiredCreatorFees,
+            hasOptionalCreatorFees: feeInfo.hasOptionalCreatorFees,
+            hasCreatorFees: actualCreatorFeePercent > 0,
+            feeInfo: feeInfo,  // Pass through for createListing
+            payOptionalRoyalties
+        };
+    } catch (error) {
+        logger.error('Error calculating fee breakdown:', error);
+        // Return minimal fee info on error
+        const openseaFeePercent = 1.0;
+        const openseaFeeAmount = listingPrice * (openseaFeePercent / 100);
+        const netProceeds = listingPrice - openseaFeeAmount;
+
+        return {
+            openseaFeePercent,
+            openseaFeeAmount,
+            requiredCreatorFeePercent: 0,
+            requiredCreatorFeeAmount: 0,
+            optionalCreatorFeePercent: 0,
+            optionalCreatorFeeAmount: 0,
+            creatorFeePercent: 0,
+            creatorFeeAmount: 0,
+            totalFeePercent: openseaFeePercent,
+            totalFeeAmount: openseaFeeAmount,
+            netProceeds,
+            hasRequiredCreatorFees: false,
+            hasOptionalCreatorFees: false,
+            hasCreatorFees: false,
+            feeInfo: null,
+            payOptionalRoyalties: false
+        };
+    }
+}
+
+/**
  * Step 5: Confirm listing (interactive mode)
  * @param {Object} listingInfo - Listing information
  * @returns {boolean|symbol} true to confirm, BACK_SIGNAL to go back, CANCEL_SIGNAL to cancel
@@ -1060,6 +1221,33 @@ async function confirmListingStep(listingInfo) {
     if (listingInfo.pricingInfo) {
         logger.info(`Pricing: ${listingInfo.pricingInfo}`);
     }
+
+    // Display fee breakdown if available
+    if (listingInfo.feeBreakdown) {
+        logger.info('');
+        logger.info('Fee Breakdown:');
+        logger.info(`  - OpenSea Fee (${listingInfo.feeBreakdown.openseaFeePercent}%): ${listingInfo.feeBreakdown.openseaFeeAmount.toFixed(6)} ETH`);
+
+        // Show required creator fees
+        if (listingInfo.feeBreakdown.hasRequiredCreatorFees) {
+            logger.info(`  - Creator Royalty - Required (${listingInfo.feeBreakdown.requiredCreatorFeePercent}%): ${listingInfo.feeBreakdown.requiredCreatorFeeAmount.toFixed(6)} ETH`);
+        }
+
+        // Show optional creator fees (included or skipped)
+        if (listingInfo.feeBreakdown.hasOptionalCreatorFees) {
+            if (listingInfo.feeBreakdown.payOptionalRoyalties) {
+                logger.info(`  - Creator Royalty - Optional (${listingInfo.feeBreakdown.optionalCreatorFeePercent}%): ${listingInfo.feeBreakdown.optionalCreatorFeeAmount.toFixed(6)} ETH [INCLUDED]`);
+            } else {
+                logger.info(`  - Creator Royalty - Optional (${listingInfo.feeBreakdown.optionalCreatorFeePercent}%): ${listingInfo.feeBreakdown.optionalCreatorFeeAmount.toFixed(6)} ETH [SKIPPED]`);
+            }
+        }
+
+        logger.info(`  - Total Fees (${listingInfo.feeBreakdown.totalFeePercent}%): ${listingInfo.feeBreakdown.totalFeeAmount.toFixed(6)} ETH`);
+        logger.info('');
+        logger.info(`💰 Net Proceeds: ${listingInfo.feeBreakdown.netProceeds.toFixed(6)} ETH`);
+    }
+
+    logger.info('');
     logger.info(`Expiration: ${listingInfo.expiration}`);
     logger.info(`Marketplaces: ${listingInfo.marketplaces}`);
     logger.info(`Wallet: ${listingInfo.wallet}`);
@@ -1113,6 +1301,33 @@ async function confirmListing(listingInfo) {
     if (listingInfo.pricingInfo) {
         logger.info(`Pricing: ${listingInfo.pricingInfo}`);
     }
+
+    // Display fee breakdown if available
+    if (listingInfo.feeBreakdown) {
+        logger.info('');
+        logger.info('Fee Breakdown:');
+        logger.info(`  - OpenSea Fee (${listingInfo.feeBreakdown.openseaFeePercent}%): ${listingInfo.feeBreakdown.openseaFeeAmount.toFixed(6)} ETH`);
+
+        // Show required creator fees
+        if (listingInfo.feeBreakdown.hasRequiredCreatorFees) {
+            logger.info(`  - Creator Royalty - Required (${listingInfo.feeBreakdown.requiredCreatorFeePercent}%): ${listingInfo.feeBreakdown.requiredCreatorFeeAmount.toFixed(6)} ETH`);
+        }
+
+        // Show optional creator fees (included or skipped)
+        if (listingInfo.feeBreakdown.hasOptionalCreatorFees) {
+            if (listingInfo.feeBreakdown.payOptionalRoyalties) {
+                logger.info(`  - Creator Royalty - Optional (${listingInfo.feeBreakdown.optionalCreatorFeePercent}%): ${listingInfo.feeBreakdown.optionalCreatorFeeAmount.toFixed(6)} ETH [INCLUDED]`);
+            } else {
+                logger.info(`  - Creator Royalty - Optional (${listingInfo.feeBreakdown.optionalCreatorFeePercent}%): ${listingInfo.feeBreakdown.optionalCreatorFeeAmount.toFixed(6)} ETH [SKIPPED]`);
+            }
+        }
+
+        logger.info(`  - Total Fees (${listingInfo.feeBreakdown.totalFeePercent}%): ${listingInfo.feeBreakdown.totalFeeAmount.toFixed(6)} ETH`);
+        logger.info('');
+        logger.info(`💰 Net Proceeds: ${listingInfo.feeBreakdown.netProceeds.toFixed(6)} ETH`);
+    }
+
+    logger.info('');
     logger.info(`Expiration: ${listingInfo.expiration}`);
     logger.info(`Marketplaces: ${listingInfo.marketplaces}`);
     logger.info(`Wallet: ${listingInfo.wallet}`);

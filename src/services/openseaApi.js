@@ -191,9 +191,9 @@ export class OpenSeaApi {
     async getCollectionInfo(collectionSlug) {
         try {
             const url = new URL(`${this.baseUrl}/api/v2/collections/${collectionSlug}`);
-            
+
             // logger.debug('Fetching collection info:', url.toString());
-            
+
             const response = await this.fetchWithRetry(url.toString(), {
                 method: 'GET',
                 headers: {
@@ -206,6 +206,80 @@ export class OpenSeaApi {
             return response;
         } catch (error) {
             logger.error('Failed to fetch collection info:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get collection fee information including creator royalties
+     * @param {string} collectionSlug - Collection slug
+     * @returns {Object} Fee information with opensea fee, creator fees, and total
+     */
+    async getCollectionFees(collectionSlug) {
+        try {
+            const collectionInfo = await this.getCollectionInfo(collectionSlug);
+
+            if (!collectionInfo) {
+                logger.warn('Could not fetch collection info for fees');
+                return null;
+            }
+
+            logger.debug('Collection fees data:', JSON.stringify(collectionInfo.fees, null, 2));
+
+            // OpenSea platform fee is always 1% (100 basis points)
+            const openseaFeePercent = 1.0;
+
+            // Parse creator fees from the fees array
+            // The fees array may contain multiple fee objects
+            let requiredCreatorFeePercent = 0;
+            let optionalCreatorFeePercent = 0;
+            const requiredCreatorFees = [];
+            const optionalCreatorFees = [];
+
+            if (collectionInfo.fees && Array.isArray(collectionInfo.fees)) {
+                // Separate required and optional creator fees
+                collectionInfo.fees.forEach(fee => {
+                    if (fee.fee && typeof fee.fee === 'number') {
+                        const feeObj = {
+                            percent: fee.fee,
+                            recipient: fee.recipient,
+                            required: fee.required
+                        };
+
+                        if (fee.required) {
+                            // Required creator fees (must be paid)
+                            requiredCreatorFeePercent += fee.fee;
+                            requiredCreatorFees.push(feeObj);
+                        } else {
+                            // Optional creator fees (can be skipped)
+                            optionalCreatorFeePercent += fee.fee;
+                            optionalCreatorFees.push(feeObj);
+                        }
+                    }
+                });
+            }
+
+            const totalCreatorFeePercent = requiredCreatorFeePercent + optionalCreatorFeePercent;
+
+            logger.debug(`Fee breakdown - OpenSea: ${openseaFeePercent}%, Required Creator: ${requiredCreatorFeePercent}%, Optional Creator: ${optionalCreatorFeePercent}%`);
+
+            return {
+                openseaFeePercent,
+                requiredCreatorFeePercent,
+                optionalCreatorFeePercent,
+                totalCreatorFeePercent,
+                requiredCreatorFees,
+                optionalCreatorFees,
+                hasRequiredCreatorFees: requiredCreatorFeePercent > 0,
+                hasOptionalCreatorFees: optionalCreatorFeePercent > 0,
+                // For backward compatibility
+                creatorFeePercent: totalCreatorFeePercent,
+                creatorFees: [...requiredCreatorFees, ...optionalCreatorFees],
+                totalFeePercent: openseaFeePercent + totalCreatorFeePercent,
+                hasCreatorFees: totalCreatorFeePercent > 0
+            };
+        } catch (error) {
+            logger.error('Failed to get collection fees:', error);
             return null;
         }
     }
@@ -402,17 +476,26 @@ export class OpenSeaApi {
     }
 
     async createListing(params) {
-        const { contractAddress, tokenId, price, expirationTime, wallet, walletAddress } = params;
-        
+        const {
+            contractAddress,
+            tokenId,
+            price,
+            expirationTime,
+            wallet,
+            walletAddress,
+            feeInfo = null,
+            payOptionalRoyalties = false
+        } = params;
+
         try {
             logger.info('Building listing order with Seaport.js...');
 
             // 创建 Seaport 实例
             const seaport = new Seaport(wallet);
-            
+
             // Base 链上的 listing 使用 ETH 而不是 WETH
             const useNativeToken = this.chainConfig.chain === 'base';
-            
+
             logger.debug('Order parameters:', {
                 contractAddress,
                 tokenId,
@@ -420,21 +503,74 @@ export class OpenSeaApi {
                 expirationTime,
                 walletAddress,
                 chain: this.chainConfig.chain,
-                useNativeToken
+                useNativeToken,
+                payOptionalRoyalties
             });
 
-            // 计算 OpenSea fee (1% = 100 basis points)
+            // 计算费用
             const priceInWei = ethers.parseEther(price.toString());
+
+            // OpenSea platform fee (1% = 100 basis points)
             const openseaFeeRecipient = '0x0000a26b00c1F0DF003000390027140000fAa719';
             const openseaFeeAmount = priceInWei * BigInt(100) / BigInt(10000);
-            const sellerAmount = priceInWei - openseaFeeAmount;
+
+            // Build consideration array: seller + OpenSea fee + creator fees
+            const consideration = [];
+            let totalFees = openseaFeeAmount;
+
+            // Add creator royalties if available
+            if (feeInfo) {
+                // Add required creator fees (always included)
+                if (feeInfo.requiredCreatorFees && feeInfo.requiredCreatorFees.length > 0) {
+                    feeInfo.requiredCreatorFees.forEach(fee => {
+                        const feeAmount = priceInWei * BigInt(Math.floor(fee.percent * 100)) / BigInt(10000);
+                        totalFees += feeAmount;
+                        consideration.push({
+                            amount: feeAmount.toString(),
+                            recipient: fee.recipient,
+                        });
+                        logger.debug(`Adding required creator fee: ${fee.percent}% to ${fee.recipient}`);
+                    });
+                }
+
+                // Add optional creator fees (only if payOptionalRoyalties is true)
+                if (payOptionalRoyalties && feeInfo.optionalCreatorFees && feeInfo.optionalCreatorFees.length > 0) {
+                    feeInfo.optionalCreatorFees.forEach(fee => {
+                        const feeAmount = priceInWei * BigInt(Math.floor(fee.percent * 100)) / BigInt(10000);
+                        totalFees += feeAmount;
+                        consideration.push({
+                            amount: feeAmount.toString(),
+                            recipient: fee.recipient,
+                        });
+                        logger.info(`Including optional creator fee: ${fee.percent}% to ${fee.recipient}`);
+                    });
+                } else if (feeInfo.hasOptionalCreatorFees) {
+                    logger.info(`Skipping optional creator fees (${feeInfo.optionalCreatorFeePercent}%)`);
+                }
+            }
+
+            // Calculate seller's net amount (price - all fees)
+            const sellerAmount = priceInWei - totalFees;
+
+            // Add seller payment first
+            consideration.unshift({
+                amount: sellerAmount.toString(),
+                recipient: walletAddress,
+            });
+
+            // Add OpenSea fee
+            consideration.push({
+                amount: openseaFeeAmount.toString(),
+                recipient: openseaFeeRecipient,
+            });
 
             logger.info('Creating order with Seaport.js...');
-            
+            logger.debug(`Consideration items: ${consideration.length} (seller + ${consideration.length - 1} fees)`);
+
             // 使用 Seaport.js 创建 order
             // OpenSea conduit key
             const openseaConduitKey = '0x0000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000';
-            
+
             const { executeAllActions } = await seaport.createOrder({
                 conduitKey: openseaConduitKey,
                 offer: [
@@ -444,16 +580,7 @@ export class OpenSeaApi {
                         identifier: tokenId.toString(),
                     }
                 ],
-                consideration: [
-                    {
-                        amount: sellerAmount.toString(),
-                        recipient: walletAddress,
-                    },
-                    {
-                        amount: openseaFeeAmount.toString(),
-                        recipient: openseaFeeRecipient,
-                    }
-                ],
+                consideration: consideration,
                 endTime: expirationTime.toString(),
                 // 如果是 Base 链,使用 ETH,否则使用 WETH
                 ...(useNativeToken ? {} : {

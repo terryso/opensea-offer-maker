@@ -211,6 +211,58 @@ describe('BuyService', () => {
         });
     });
 
+    describe('Price and seller extraction fallbacks', () => {
+        it('should extract price from current_price field', () => {
+            const listing = {
+                current_price: ethers.parseEther('1.5').toString()
+            };
+
+            const priceValue = listing.price?.current?.value || listing.current_price || '0';
+            const priceInETH = parseFloat(ethers.formatEther(priceValue));
+
+            expect(priceInETH).toBe(1.5);
+        });
+
+        it('should use default 0 when no price fields exist', () => {
+            const listing = {};
+
+            const priceValue = listing.price?.current?.value || listing.current_price || '0';
+            const priceInETH = parseFloat(ethers.formatEther(priceValue));
+
+            expect(priceInETH).toBe(0);
+        });
+
+        it('should extract seller from maker.address field', () => {
+            const listing = {
+                maker: {
+                    address: '0xMakerAddress'
+                }
+            };
+
+            const seller = listing.protocol_data?.parameters?.offerer || listing.maker?.address || listing.maker_address || 'Unknown';
+
+            expect(seller).toBe('0xMakerAddress');
+        });
+
+        it('should extract seller from maker_address field', () => {
+            const listing = {
+                maker_address: '0xMakerAddressAlt'
+            };
+
+            const seller = listing.protocol_data?.parameters?.offerer || listing.maker?.address || listing.maker_address || 'Unknown';
+
+            expect(seller).toBe('0xMakerAddressAlt');
+        });
+
+        it('should use Unknown when no seller fields exist', () => {
+            const listing = {};
+
+            const seller = listing.protocol_data?.parameters?.offerer || listing.maker?.address || listing.maker_address || 'Unknown';
+
+            expect(seller).toBe('Unknown');
+        });
+    });
+
     describe('buySpecificNFT', () => {
         let mockSdk, mockWallet, mockOpenseaApi, mockOptions;
 
@@ -347,6 +399,78 @@ describe('BuyService', () => {
                     mockOptions
                 )
             ).rejects.toThrow('Insufficient balance');
+        });
+
+        it('should handle listing with current_price field instead of price.current.value', async () => {
+            const mockListing = {
+                current_price: ethers.parseEther('1.0').toString(),
+                maker: {
+                    address: '0xMakerAddress'
+                },
+                order: {}
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            const result = await buySpecificNFT(
+                mockSdk,
+                '0xContractAddress',
+                '123',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            expect(result).toBe('0xtxhash');
+        });
+
+        it('should handle listing with maker_address field', async () => {
+            const mockListing = {
+                current_price: ethers.parseEther('1.0').toString(),
+                maker_address: '0xMakerAddressField',
+                order: {}
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            const result = await buySpecificNFT(
+                mockSdk,
+                '0xContractAddress',
+                '123',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            expect(result).toBe('0xtxhash');
+        });
+
+        it('should handle listing with no order field', async () => {
+            const mockListing = {
+                current_price: ethers.parseEther('1.0').toString(),
+                maker_address: '0xMaker'
+            };
+
+            mockOpenseaApi.getListingByTokenId.mockResolvedValue(mockListing);
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            const result = await buySpecificNFT(
+                mockSdk,
+                '0xContractAddress',
+                '123',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            expect(result).toBe('0xtxhash');
+            expect(mockSdk.fulfillOrder).toHaveBeenCalledWith({
+                order: mockListing,
+                accountAddress: '0x1234567890123456789012345678901234567890',
+                domain: 'opensea-offer-maker'
+            });
         });
     });
 
@@ -553,6 +677,81 @@ describe('BuyService', () => {
                     mockOptions
                 )
             ).rejects.toThrow('exceeds maximum acceptable price');
+        });
+
+        it('should handle listings with current_price field', async () => {
+            const mockListings = [
+                {
+                    current_price: ethers.parseEther('1.0').toString(),
+                    protocol_data: {
+                        parameters: {
+                            offerer: '0xSeller',
+                            offer: [{
+                                token: '0xContract',
+                                identifierOrCriteria: '100'
+                            }]
+                        }
+                    },
+                    order: {}
+                },
+                {
+                    current_price: ethers.parseEther('1.5').toString(),
+                    protocol_data: {
+                        parameters: {
+                            offerer: '0xSeller2',
+                            offer: [{
+                                token: '0xContract',
+                                identifierOrCriteria: '101'
+                            }]
+                        }
+                    },
+                    order: {}
+                }
+            ];
+
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: mockListings });
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            const result = await buyFloorNFT(
+                mockSdk,
+                'test-collection',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            expect(result).toBe('0xtxhash');
+        });
+
+        it('should handle listings with maker.address field', async () => {
+            const mockListings = [{
+                current_price: ethers.parseEther('1.0').toString(),
+                maker: {
+                    address: '0xMakerAddress'
+                },
+                protocol_data: {
+                    parameters: {
+                        offer: [{
+                            token: '0xContract',
+                            identifierOrCriteria: '123'
+                        }]
+                    }
+                },
+                order: {}
+            }];
+
+            mockOpenseaApi.getBestListings.mockResolvedValue({ listings: mockListings });
+            mockSdk.fulfillOrder.mockResolvedValue('0xtxhash');
+
+            const result = await buyFloorNFT(
+                mockSdk,
+                'test-collection',
+                mockWallet,
+                mockOpenseaApi,
+                mockOptions
+            );
+
+            expect(result).toBe('0xtxhash');
         });
     });
 
