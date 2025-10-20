@@ -13,25 +13,38 @@ export class OpenSeaApi {
         this.chainConfig = chainConfig;
         this.cacheService = new CacheService();
 
-        // 代理配置
-        const proxyUrl = process.env.HTTP_PROXY || 'http://127.0.0.1:7890';
-        const httpsAgent = new HttpsProxyAgent(proxyUrl);
-
-        // 创建 axios 实例，支持代理和更长的超时
-        this.axiosInstance = axios.create({
+        // 代理配置 - 只在环境变量设置时使用
+        const proxyUrl = process.env.HTTP_PROXY;
+        const axiosConfig = {
             timeout: 60000, // 60秒超时
-            httpsAgent: httpsAgent,
-            proxy: false, // 禁用默认代理，使用 httpsAgent
             headers: {
                 'X-API-KEY': this.apiKey,
                 'Accept': 'application/json'
             }
-        });
-        
-        logger.debug(`Using proxy: ${proxyUrl}`);
+        };
+
+        // 只有在明确设置了代理时才使用代理
+        if (proxyUrl) {
+            try {
+                const httpsAgent = new HttpsProxyAgent(proxyUrl);
+                axiosConfig.httpsAgent = httpsAgent;
+                axiosConfig.proxy = false; // 禁用默认代理，使用 httpsAgent
+                logger.info(`Using HTTP proxy: ${proxyUrl}`);
+            } catch (error) {
+                logger.warn(`Failed to configure proxy ${proxyUrl}: ${error.message}`);
+                logger.info('Continuing without proxy...');
+            }
+        } else {
+            logger.debug('No HTTP_PROXY configured, using direct connection');
+        }
+
+        // 创建 axios 实例
+        this.axiosInstance = axios.create(axiosConfig);
     }
 
-    async fetchWithRetry(url, options, retries = 3, delay = 1000) {
+    async fetchWithRetry(url, options, retries = 3, initialDelay = 1000) {
+        let lastError;
+
         for (let i = 0; i < retries; i++) {
             try {
                 const response = await this.axiosInstance({
@@ -44,43 +57,64 @@ export class OpenSeaApi {
 
                 return response.data;
             } catch (error) {
-                logger.error(`Attempt ${i + 1} failed:`, error.message);
-                logger.error(`Error details - URL: ${url}`);
+                lastError = error;
+                logger.error(`Attempt ${i + 1}/${retries} failed:`, error.message);
 
                 if (error.response) {
                     // HTTP 错误响应
                     const status = error.response.status;
 
                     if (status === 404) {
+                        // 404 不需要重试
                         return { offers: [] };
                     }
 
                     if (status === 401) {
+                        // 认证错误不需要重试
                         throw new Error(`Invalid API key: ${error.response.data}`);
                     }
 
-                    logger.error(`API Error: ${status}`, error.response.data);
+                    if (status === 500 || status === 502 || status === 503) {
+                        // 服务器错误，可以重试但使用更长的延迟
+                        logger.error(`Server error ${status}, will retry after delay...`);
+                    } else if (status === 429) {
+                        // 速率限制，使用更长的延迟
+                        logger.error('Rate limited, will retry with longer delay...');
+                    } else {
+                        logger.error(`API Error: ${status}`, error.response.data);
+                    }
 
+                    // 最后一次尝试失败，抛出错误
                     if (i === retries - 1) {
                         throw new Error(`HTTP error! status: ${status}, details: ${JSON.stringify(error.response.data)}`);
                     }
                 } else if (error.code === 'ECONNABORTED') {
                     logger.error('Request timeout');
+                } else if (error.code === 'ECONNRESET') {
+                    logger.error('Connection reset - possible proxy or network issue');
                 } else {
                     logger.error('Network error:', error.code);
                 }
 
+                // 不要重试认证错误
                 if (error.message.includes('Invalid API key')) {
                     throw error;
                 }
 
+                // 最后一次尝试失败，抛出错误
                 if (i === retries - 1) {
                     throw error;
                 }
 
+                // 指数退避：每次重试延迟时间翻倍
+                const delay = initialDelay * Math.pow(2, i);
+                logger.debug(`Waiting ${delay}ms before retry...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
+
+        // 如果所有重试都失败，抛出最后的错误
+        throw lastError;
     }
 
     async getCollectionOffers(collectionSlug) {
@@ -836,6 +870,15 @@ export class OpenSeaApi {
         try {
             const url = new URL(`${this.baseUrl}/api/v2/events/accounts/${address}`);
 
+            // Validate timestamp if provided
+            if (filters.after) {
+                const now = Math.floor(Date.now() / 1000);
+                if (filters.after > now) {
+                    logger.warn(`Invalid 'after' timestamp ${filters.after} is in the future, using current time instead`);
+                    filters.after = now;
+                }
+            }
+
             // Add optional filters
             if (filters.eventType && filters.eventType !== 'all') {
                 url.searchParams.append('event_type', filters.eventType);
@@ -868,6 +911,7 @@ export class OpenSeaApi {
             return response;
         } catch (error) {
             logger.error('Failed to fetch account events:', error.message);
+            // Return empty result to allow polling to continue
             return { asset_events: [], next: null };
         }
     }

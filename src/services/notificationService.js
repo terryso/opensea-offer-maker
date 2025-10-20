@@ -302,7 +302,10 @@ Cancelled By: ${this._truncateAddress(maker)}`;
      */
     displayEvent(event) {
         const formatted = this.formatEvent(event);
+        // Add visual separator for better readability
+        logger.info('\n' + '─'.repeat(60));
         logger.info(formatted);
+        logger.info('─'.repeat(60) + '\n');
     }
 
     /**

@@ -287,6 +287,9 @@ export class PollingMonitorService {
 
         logger.info(`Starting polling with interval: ${this.config.pollingInterval}ms`);
 
+        // Keep track of poll count for status updates
+        this.pollCount = 0;
+
         // Run first poll immediately
         this._poll();
 
@@ -320,7 +323,15 @@ export class PollingMonitorService {
         }
 
         try {
-            logger.debug('Polling for events...');
+            this.pollCount = (this.pollCount || 0) + 1;
+
+            // Show periodic status updates (every 12 polls = 1 minute at 5s interval)
+            if (this.pollCount % 12 === 1) {
+                const timestamp = new Date().toLocaleTimeString();
+                logger.info(`[${timestamp}] Polling for events... (poll #${this.pollCount})`);
+            } else {
+                logger.debug(`Polling for events... (poll #${this.pollCount})`);
+            }
 
             // Get unique wallet addresses from subscriptions
             const walletAddresses = new Set();
@@ -347,6 +358,15 @@ export class PollingMonitorService {
      */
     async _fetchAndProcessEvents(walletAddress) {
         try {
+            // Validate timestamp before using it
+            const now = Math.floor(Date.now() / 1000);
+
+            // If lastEventTimestamp is in the future, reset it
+            if (this.lastEventTimestamp > now) {
+                logger.warn(`Last event timestamp ${this.lastEventTimestamp} is in the future, resetting to ${now - this.config.initialLookback}`);
+                this.lastEventTimestamp = now - this.config.initialLookback;
+            }
+
             // Fetch events with timestamp filter
             const filters = {
                 eventType: 'all', // Get all event types, filter later
@@ -354,7 +374,7 @@ export class PollingMonitorService {
                 limit: 100
             };
 
-            logger.debug(`Fetching events for wallet ${walletAddress} after timestamp ${this.lastEventTimestamp}`);
+            logger.debug(`Fetching events for wallet ${walletAddress} after timestamp ${this.lastEventTimestamp} (${new Date(this.lastEventTimestamp * 1000).toISOString()})`);
 
             const response = await this.openseaApi.getAccountEvents(walletAddress, filters);
 
@@ -364,11 +384,25 @@ export class PollingMonitorService {
             }
 
             const events = response.asset_events;
-            logger.debug(`Received ${events.length} events from API`);
+
+            if (events.length > 0) {
+                logger.info(`📬 Received ${events.length} new event(s) from API`);
+            } else {
+                logger.debug(`No new events (checked up to ${new Date(this.lastEventTimestamp * 1000).toISOString()})`);
+            }
 
             // Process each event
+            let processedCount = 0;
             for (const event of events) {
-                await this._processEvent(event, walletAddress);
+                const wasProcessed = await this._processEvent(event, walletAddress);
+                if (wasProcessed) processedCount++;
+            }
+
+            if (processedCount > 0) {
+                logger.info(`✅ Processed ${processedCount} new event(s)`);
+            } else if (events.length > 0) {
+                logger.info(`⚠️  Received ${events.length} event(s) but none matched your wallet/filters`);
+                logger.info(`   (Events may not involve wallet ${walletAddress})`);
             }
 
             // Update last event timestamp
@@ -376,12 +410,13 @@ export class PollingMonitorService {
                 const latestTimestamp = this._getLatestEventTimestamp(events);
                 if (latestTimestamp > this.lastEventTimestamp) {
                     this.lastEventTimestamp = latestTimestamp;
-                    logger.debug(`Updated last event timestamp to ${this.lastEventTimestamp}`);
+                    logger.debug(`Updated last event timestamp to ${this.lastEventTimestamp} (${new Date(this.lastEventTimestamp * 1000).toISOString()})`);
                 }
             }
 
         } catch (error) {
             logger.error(`Failed to fetch events for wallet ${walletAddress}:`, error.message);
+            // Don't throw - let polling continue
         }
     }
 
@@ -390,6 +425,7 @@ export class PollingMonitorService {
      * @private
      * @param {Object} event - Event from OpenSea REST API
      * @param {string} walletAddress - Wallet address that this event is for
+     * @returns {boolean} True if event was processed, false if skipped
      */
     async _processEvent(event, walletAddress) {
         try {
@@ -399,15 +435,28 @@ export class PollingMonitorService {
             // Skip if already seen
             if (this.seenEventIds.has(eventId)) {
                 logger.debug(`Skipping duplicate event: ${eventId}`);
-                return;
+                return false;
+            }
+
+            // Debug: Log raw event for troubleshooting (first 3 events only to avoid spam)
+            this._eventDebugCount = (this._eventDebugCount || 0) + 1;
+            if (this._eventDebugCount <= 3) {
+                logger.info('\n📋 Raw event from OpenSea API:');
+                logger.info(JSON.stringify(event, null, 2));
             }
 
             // Transform REST API event to Stream API format
             const transformedEvent = this._transformEventToStreamFormat(event);
 
             if (!transformedEvent) {
-                logger.debug('Event could not be transformed, skipping');
-                return;
+                logger.info('⚠️  Event could not be transformed, skipping');
+                logger.info(`   Event type: ${event.event_type}`);
+                return false;
+            }
+
+            if (this._eventDebugCount <= 3) {
+                logger.info('\n🔄 Transformed event:');
+                logger.info(JSON.stringify(transformedEvent, null, 2));
             }
 
             // Mark as seen
@@ -421,9 +470,11 @@ export class PollingMonitorService {
             }
 
             // Find matching subscriptions and call callbacks
+            let matched = false;
             for (const sub of this.subscriptions.values()) {
                 // Check if event type matches subscription
                 if (!sub.eventTypes.includes(transformedEvent.event_type)) {
+                    logger.info(`   ℹ️  Event type '${transformedEvent.event_type}' not in your subscriptions`);
                     continue;
                 }
 
@@ -431,6 +482,7 @@ export class PollingMonitorService {
                 if (sub.collectionSlug !== '*') {
                     const eventCollection = transformedEvent.payload?.collection?.slug;
                     if (eventCollection !== sub.collectionSlug) {
+                        logger.info(`   ℹ️  Collection '${eventCollection}' doesn't match filter: ${sub.collectionSlug}`);
                         continue;
                     }
                 }
@@ -440,19 +492,43 @@ export class PollingMonitorService {
                     const normalizedWallet = sub.walletAddress.toLowerCase();
                     const fromAddress = transformedEvent.payload?.from_account?.address?.toLowerCase();
                     const toAddress = transformedEvent.payload?.to_account?.address?.toLowerCase();
+                    const makerAddress = transformedEvent.payload?.maker?.address?.toLowerCase();
 
-                    if (fromAddress !== normalizedWallet && toAddress !== normalizedWallet) {
+                    // Check if wallet is involved (as from, to, or maker)
+                    const isInvolved =
+                        fromAddress === normalizedWallet ||
+                        toAddress === normalizedWallet ||
+                        makerAddress === normalizedWallet;
+
+                    if (!isInvolved) {
+                        logger.info(`   ℹ️  Event doesn't involve your wallet`);
+                        logger.info(`   Your wallet: ${normalizedWallet}`);
+                        logger.info(`   From: ${fromAddress || 'N/A'}`);
+                        logger.info(`   To: ${toAddress || 'N/A'}`);
+                        logger.info(`   Maker: ${makerAddress || 'N/A'}`);
                         continue;
                     }
                 }
 
                 // Call the callback
-                logger.debug(`Calling callback for event: ${transformedEvent.event_type}`);
-                sub.callback(transformedEvent);
+                logger.info(`\n🔔 New ${transformedEvent.event_type} event detected!`);
+                try {
+                    await sub.callback(transformedEvent);
+                    matched = true;
+                } catch (callbackError) {
+                    logger.error('Error in event callback:', callbackError.message);
+                }
             }
+
+            if (!matched) {
+                logger.debug('Event did not match any subscription filters');
+            }
+
+            return matched;
 
         } catch (error) {
             logger.error('Error processing event:', error.message);
+            return false;
         }
     }
 
@@ -566,10 +642,18 @@ export class PollingMonitorService {
      */
     _getLatestEventTimestamp(events) {
         let latest = this.lastEventTimestamp || 0;
+        const now = Math.floor(Date.now() / 1000);
 
         for (const event of events) {
             if (event.event_timestamp) {
                 const timestamp = new Date(event.event_timestamp).getTime() / 1000;
+
+                // Validate timestamp: must not be in the future
+                if (timestamp > now) {
+                    logger.warn(`Event timestamp ${timestamp} is in the future (now: ${now}), skipping`);
+                    continue;
+                }
+
                 if (timestamp > latest) {
                     latest = timestamp;
                 }

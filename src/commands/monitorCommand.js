@@ -90,6 +90,7 @@ const startCommand = new Command('start')
 
             // Display monitoring info
             const apiInfo = mode === 'stream' ? 'OpenSea Stream API (WebSocket)' : 'OpenSea REST API (Polling)';
+            logger.info(`\n${'='.repeat(60)}`);
             logger.info(`Connected to ${apiInfo}`);
             logger.info(`Monitoring wallet: ${walletAddress}`);
             logger.info(`Chain: ${chainConfig.name}`);
@@ -100,7 +101,11 @@ const startCommand = new Command('start')
                 const interval = monitorService.config.pollingInterval / 1000;
                 logger.info(`Polling interval: ${interval}s`);
             }
-            logger.info('\nMonitoring started. Press Ctrl+C to stop.\n');
+            logger.info(`${'='.repeat(60)}`);
+            logger.info('\n✅ Monitoring started successfully!');
+            logger.info('📊 Watching for NFT events (sales, listings, transfers, bids, cancellations)...');
+            logger.info('⏱️  Status updates will appear every minute');
+            logger.info('🛑 Press Ctrl+C to stop monitoring\n');
 
             // Set up graceful shutdown handlers
             let isShuttingDown = false;
