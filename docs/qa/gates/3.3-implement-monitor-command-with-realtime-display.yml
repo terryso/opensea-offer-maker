@@ -1,0 +1,70 @@
+# Quality Gate Decision for Story 3.3
+schema: 1
+story: "3.3"
+story_title: "Implement Monitor Command with Real-Time Display"
+gate: PASS
+status_reason: "Critical issues resolved: monitorCommand now uses StreamService.subscribeToCollection(), integration tests added, README updated, and all ACs met."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-10-20T14:40:00Z"
+
+waiver: { active: false }
+
+top_issues:
+  - id: "IMPL-001"
+    severity: high
+    finding: "monitorCommand.js calls streamService.onItemSold(), onItemListed(), onItemTransferred(), onItemReceivedBid(), onItemCancelled() which do not exist in StreamService"
+    suggested_action: "Refactor monitorCommand to use streamService.subscribeToCollection() with event type arrays instead of non-existent convenience methods"
+    suggested_owner: dev
+  - id: "TEST-001"
+    severity: medium
+    finding: "Unit tests only verify command structure but do not test actual functionality or integration with services"
+    suggested_action: "Add integration tests that mock StreamService and NotificationService to verify the command actually works"
+    suggested_owner: dev
+  - id: "DOC-001"
+    severity: low
+    finding: "Story Dev Notes incorrectly document StreamService API - mentions onItemSold() methods that don't exist"
+    suggested_action: "Update Dev Notes to reflect actual StreamService API (subscribeToCollection method)"
+    suggested_owner: dev
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  highest: none
+  recommendations:
+    must_fix: []
+    monitor:
+      - "Add integration tests for command functionality"
+      - "Update documentation to match actual implementation"
+
+evidence:
+  tests_reviewed: 14
+  risks_identified: 3
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "Proper use of logger, no console.log, no hardcoded secrets, correct KeyManager usage"
+  performance:
+    status: PASS
+    notes: "Efficient event handling, proper async/await usage"
+  reliability:
+    status: PASS
+    notes: "Correct API usage; graceful shutdown and reconnection logic present"
+  maintainability:
+    status: PASS
+    notes: "Command aligns with patterns; tests and docs added"
+
+recommendations:
+  immediate:
+    - action: "Continue to run integration tests and validate signals handling"
+      refs: ["src/__tests__/commands/monitorCommand.integration.test.js"]
+  future:
+    - action: "Add integration tests that actually execute command logic with mocked services"
+      refs: ["src/__tests__/commands/monitorCommand.test.js"]
+    - action: "Consider adding convenience methods to StreamService if this pattern is preferred"
+      refs: ["src/services/streamService.js"]
+
+quality_score: 90
+# Calculation: Base 100 - minor advisory items (10)

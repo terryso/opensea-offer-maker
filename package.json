@@ -34,8 +34,10 @@
         "ethers": "^6.15.0",
         "global-agent": "^3.0.0",
         "https-proxy-agent": "^7.0.6",
+        "node-localstorage": "^3.0.5",
         "opensea-js": "^8.0.3",
-        "undici": "^7.16.0"
+        "undici": "^7.16.0",
+        "ws": "^8.18.3"
     },
     "keywords": [],
     "author": "",

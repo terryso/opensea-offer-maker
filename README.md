@@ -6,6 +6,8 @@ A command-line tool for creating and managing offers on OpenSea. Supports multip
 - Create collection and individual NFT offers
 - Automatic bidding with price range
 - Monitor current offers
+- Real-time NFT event monitoring (sales, listings, transfers, bids)
+- Event history and statistics
 - Support for multiple chains
 - Real-time offer tracking
 - Secure private key management
@@ -203,6 +205,86 @@ node src/cli.js list -a contract_address -t token_id -p 0.1 -e 7d
 
 Supported marketplace:
 - OpenSea
+
+### NFT Monitoring
+
+Monitor your NFT portfolio in real-time with OpenSea Stream API.
+
+#### Start Monitoring
+
+Monitor all events for your wallet's NFTs:
+```bash
+node src/cli.js monitor start
+```
+
+Monitor specific collections:
+```bash
+node src/cli.js monitor start --collections azuki,beanz
+```
+
+Monitor all collections (high volume):
+```bash
+node src/cli.js monitor start --all-collections
+```
+
+Set verbosity level (minimal, normal, detailed):
+```bash
+node src/cli.js monitor start --verbosity detailed
+```
+
+Monitor on specific chain:
+```bash
+node src/cli.js monitor start --chain ethereum
+```
+
+**Stopping:** Press Ctrl+C to gracefully shutdown monitoring.
+
+#### View Event History
+
+Show recent events from logs:
+```bash
+# Show last 7 days of events
+node src/cli.js monitor history
+
+# Filter by event type
+node src/cli.js monitor history --type sale --days 7
+
+# Filter by specific NFT
+node src/cli.js monitor history --nft 0xabc...def:123 --limit 20
+
+# View on specific chain
+node src/cli.js monitor history --chain base
+```
+
+Event types: `sale`, `transfer`, `listing`, `bid`, `cancel`
+
+#### View Statistics
+
+Show monitoring statistics for last 30 days:
+```bash
+node src/cli.js monitor stats
+```
+
+Custom period:
+```bash
+node src/cli.js monitor stats --days 7 --chain ethereum
+```
+
+#### Configuration
+
+Monitor behavior is controlled by environment variables (optional):
+
+- `MONITOR_VERBOSITY` - Event display verbosity: minimal, normal, detailed (default: normal)
+- `MONITOR_LOG_RETENTION_DAYS` - Days to keep event logs (default: 30)
+
+Add these to your `.env` file if you want to change the defaults.
+
+#### Important Notes
+
+- **Best-Effort Delivery:** Events during connection drops are not re-sent by OpenSea
+- **Event Logs:** Stored in `.cache/events/{wallet}_{chain}.jsonl` (automatically gitignored)
+- **Reconnection:** Automatic reconnection with exponential backoff on connection failures
+- **Multi-Chain:** Use `--chain` flag to monitor different chains separately
 
 ## Examples
 

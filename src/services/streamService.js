@@ -123,10 +123,20 @@ export class StreamService {
             });
 
             // Set up error event listener
-            this.client.onError((error) => {
-                logger.error('OpenSea Stream API error:', error);
+            const handleError = (error) => {
+                const msg = (error && error.message) ? error.message : error;
+                logger.error('OpenSea Stream API error:', msg);
                 this._handleConnectionError(error);
-            });
+            };
+            if (typeof this.client.onError === 'function') {
+                this.client.onError(handleError);
+            } else if (typeof this.client.on === 'function') {
+                try { this.client.on('error', handleError); } catch (e) { logger.warn('Failed to bind error event via on("error"): ' + e.message); }
+                try { this.client.on('connect_error', handleError); } catch {}
+                try { this.client.on('disconnect', () => handleError(new Error('Disconnected'))); } catch {}
+            } else {
+                logger.warn('OpenSeaStreamClient has no onError or on() API; error handling may be limited');
+            }
 
             this.connectionState = StreamService.ConnectionState.CONNECTED;
             this.reconnectAttempts = 0;
