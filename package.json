@@ -27,6 +27,7 @@
     },
     "dependencies": {
         "@opensea/seaport-js": "^4.0.5",
+        "@opensea/stream-js": "^0.2.1",
         "axios": "^1.12.2",
         "commander": "^12.1.0",
         "dotenv": "^16.4.5",
