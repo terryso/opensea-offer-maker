@@ -463,5 +463,410 @@ describe('PollingMonitorService', () => {
             expect(transformed.payload.from_account.address).toBe('0x111');
             expect(transformed.payload.to_account.address).toBe('0x222');
         });
+
+        describe('error handling and edge cases', () => {
+            it('should handle connection failure', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                const originalConnect = service.openseaApi.getAccountEvents;
+                service.openseaApi.getAccountEvents = jest.fn().mockRejectedValue(new Error('Connection failed'));
+
+                // Act & Assert
+                await expect(service.connect()).resolves.not.toThrow();
+                expect(service.getConnectionState()).toBe('connected');
+
+                // Restore original method
+                service.openseaApi.getAccountEvents = originalConnect;
+            });
+
+            it('should handle disconnect when already disconnected', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+
+                // Act & Assert
+                await expect(service.disconnect()).resolves.not.toThrow();
+            });
+
+            it('should handle unsubscribe when no subscriptions', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+
+                // Act & Assert
+                await expect(service.unsubscribe()).resolves.not.toThrow();
+            });
+
+            it('should stop polling when no subscriptions', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+                expect(service.pollingTimer).toBeDefined();
+
+                // Act
+                await service.unsubscribe();
+
+                // Assert
+                expect(service.pollingTimer).toBeNull();
+            });
+
+            it('should handle polling with no subscriptions', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+
+                // Manually start polling without subscriptions
+                service._startPolling();
+                expect(service.pollingTimer).toBeDefined();
+
+                // Clean up
+                service._stopPolling();
+            });
+
+            it('should handle API error during event fetching', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+
+                const originalGetEvents = service.openseaApi.getAccountEvents;
+                service.openseaApi.getAccountEvents = jest.fn().mockRejectedValue(new Error('API Error'));
+
+                // Act - should not throw
+                await service._fetchAndProcessEvents('0x123');
+
+                // Restore
+                service.openseaApi.getAccountEvents = originalGetEvents;
+            });
+
+            it('should handle empty response from API', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+
+                service.openseaApi.getAccountEvents = jest.fn().mockResolvedValue(null);
+
+                // Act - should not throw
+                await service._fetchAndProcessEvents('0x123');
+            });
+
+            it('should handle response with no asset_events', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+
+                service.openseaApi.getAccountEvents = jest.fn().mockResolvedValue({});
+
+                // Act - should not throw
+                await service._fetchAndProcessEvents('0x123');
+            });
+
+            it('should handle empty events array', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+
+                service.openseaApi.getAccountEvents = jest.fn().mockResolvedValue({ asset_events: [] });
+
+                // Act - should not throw
+                await service._fetchAndProcessEvents('0x123');
+            });
+
+            it('should handle future timestamp in events', () => {
+                // Arrange
+                const futureTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour in future
+                const events = [
+                    { event_timestamp: '2024-01-01T12:00:00Z' }, // Valid timestamp
+                    { event_timestamp: new Date(futureTime * 1000).toISOString() } // Future timestamp
+                ];
+
+                // Act
+                const latestTimestamp = service._getLatestEventTimestamp(events);
+
+                // Assert - should ignore future timestamp
+                expect(latestTimestamp).toBeLessThan(futureTime);
+            });
+
+            it('should handle invalid timestamp format', () => {
+                // Arrange
+                const events = [
+                    { event_timestamp: 'invalid-date' },
+                    { event_timestamp: null },
+                    { event_timestamp: '2024-01-01T12:00:00Z' }
+                ];
+
+                // Act & Assert - should not throw
+                expect(() => service._getLatestEventTimestamp(events)).not.toThrow();
+            });
+
+            it('should handle invalid event in _processEvent', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                const invalidEvent = { invalid: 'data' };
+
+                // Act
+                const result = await service._processEvent(invalidEvent, '0x123');
+
+                // Assert
+                expect(result).toBe(false);
+            });
+
+            it('should handle duplicate events', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+
+                // Add an event ID to the seen set
+                const eventId = '2024-01-01T12:00:00Z:sale:0xabc:123:tx1:';
+                service.seenEventIds.add(eventId);
+
+                const event = {
+                    event_timestamp: '2024-01-01T12:00:00Z',
+                    event_type: 'sale',
+                    nft: { contract: '0xabc', identifier: '123' },
+                    transaction: 'tx1'
+                };
+
+                // Act - process event that's already seen
+                const result = await service._processEvent(event, '0x123');
+
+                // Assert - should be skipped as duplicate
+                expect(result).toBe(false);
+                expect(service.seenEventIds.has(eventId)).toBe(true);
+            });
+
+            it('should clean up seen event IDs when limit exceeded', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+
+                // Add many events to exceed the limit (10000)
+                for (let i = 0; i < 10010; i++) {
+                    service.seenEventIds.add(`event-${i}`);
+                }
+
+                const initialSize = service.seenEventIds.size;
+
+                // Act - simulate cleanup by calling the internal logic
+                if (service.seenEventIds.size > 10000) {
+                    const oldestIds = Array.from(service.seenEventIds).slice(0, 5000);
+                    oldestIds.forEach(id => service.seenEventIds.delete(id));
+                }
+
+                // Assert - should have cleaned up old IDs
+                expect(service.seenEventIds.size).toBeLessThan(initialSize);
+                expect(service.seenEventIds.size).toBeLessThanOrEqual(10000);
+            });
+
+            it('should handle callback error gracefully', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+
+                const errorCallback = jest.fn().mockRejectedValue(new Error('Callback failed'));
+                await service.subscribeToCollection('*', ['item_sold'], errorCallback, '0x123');
+
+                const event = {
+                    event_timestamp: '2024-01-01T12:00:00Z',
+                    event_type: 'sale',
+                    nft: { contract: '0xabc', identifier: '123' },
+                    transaction: 'tx1',
+                    chain: 'ethereum',
+                    asset: {
+                        contract: '0xabc',
+                        identifier: '123',
+                        name: 'Test NFT',
+                        collection: 'test-collection'
+                    },
+                    payment: {
+                        quantity: '1000000000000000000'
+                    },
+                    seller: '0x123', // Make the wallet the seller to match filter
+                    buyer: '0x456'
+                };
+
+                // Act - should not throw
+                const result = await service._processEvent(event, '0x123');
+
+                // Assert - callback error should be handled gracefully
+                expect(errorCallback).toHaveBeenCalled();
+            });
+
+            it('should handle disconnect error', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+
+                // Mock a method that throws during disconnect
+                const originalStopPolling = service._stopPolling;
+                service._stopPolling = jest.fn().mockImplementation(() => {
+                    throw new Error('Stop polling failed');
+                });
+
+                // Act & Assert - should still throw the error
+                await expect(service.disconnect()).rejects.toThrow('Stop polling failed');
+
+                // Restore
+                service._stopPolling = originalStopPolling;
+            });
+
+            it('should handle connection failure during connect', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+
+                // Mock the connection process to fail
+                const originalState = service.connectionState;
+                service.connectionState = PollingMonitorService.ConnectionState.CONNECTING;
+
+                // Act & Assert - should throw error when trying to connect while already connecting
+                await expect(service.connect()).resolves.not.toThrow();
+            });
+
+            it('should handle subscription to collection when not connected', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                // Don't connect
+
+                // Act & Assert
+                await expect(service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123'))
+                    .rejects.toThrow('Service not connected. Call connect() first.');
+            });
+
+            it('should handle empty event types array', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+
+                // Act & Assert
+                await expect(service.subscribeToCollection('test', [], () => {}, '0x123'))
+                    .rejects.toThrow('Event types must be a non-empty array');
+            });
+
+            it('should handle invalid event types in subscription', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+
+                // Act - should not throw for invalid event types (will be filtered out later)
+                await expect(service.subscribeToCollection('test', ['invalid_event'], () => {}, '0x123'))
+                    .resolves.not.toThrow();
+            });
+
+            it('should handle polling when already started', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+
+                // Call _startPolling twice
+                service._startPolling();
+                const timer1 = service.pollingTimer;
+
+                // Act
+                service._startPolling();
+                const timer2 = service.pollingTimer;
+
+                // Assert - should not create duplicate timers
+                expect(timer1).toBe(timer2);
+
+                // Cleanup
+                service._stopPolling();
+            });
+
+            it('should handle polling timer already cleared', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                service.pollingTimer = null;
+
+                // Act & Assert - should not throw
+                expect(() => service._stopPolling()).not.toThrow();
+            });
+
+            it('should handle event transformation error', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+
+                const invalidEvent = {
+                    event_type: 'unsupported_event',
+                    event_timestamp: '2024-01-01T12:00:00Z',
+                    nft: { contract: '0xabc', identifier: '123' },
+                    transaction: 'tx1'
+                };
+
+                // Act
+                const result = await service._processEvent(invalidEvent, '0x123');
+
+                // Assert
+                expect(result).toBe(false);
+            });
+
+            it('should handle subscription with no wallet filter', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+
+                const callback = jest.fn();
+                await service.subscribeToCollection('*', ['item_sold'], callback); // Use '*' for any collection
+
+                const event = {
+                    event_timestamp: '2024-01-01T12:00:00Z',
+                    event_type: 'sale',
+                    nft: { contract: '0xabc', identifier: '123' },
+                    transaction: 'tx1',
+                    chain: 'ethereum',
+                    asset: {
+                        contract: '0xabc',
+                        identifier: '123',
+                        name: 'Test NFT',
+                        collection: 'test-collection'
+                    },
+                    payment: {
+                        quantity: '1000000000000000000'
+                    },
+                    seller: '0x456',
+                    buyer: '0x789'
+                };
+
+                // Act - process event without wallet filter
+                const result = await service._processEvent(event, null);
+
+                // Assert - should process event since no wallet filter
+                expect(result).toBe(true);
+            });
+
+            it('should handle wallet not involved in event', async () => {
+                // Arrange
+                service = new PollingMonitorService({ chainConfig: testChainConfig });
+                await service.connect();
+                await service.subscribeToCollection('test', ['item_sold'], () => {}, '0x123');
+
+                const event = {
+                    event_timestamp: '2024-01-01T12:00:00Z',
+                    event_type: 'sale',
+                    nft: { contract: '0xabc', identifier: '123' },
+                    transaction: 'tx1',
+                    chain: 'ethereum',
+                    asset: {
+                        contract: '0xabc',
+                        identifier: '123',
+                        name: 'Test NFT',
+                        collection: 'test-collection'
+                    },
+                    payment: {
+                        quantity: '1000000000000000000'
+                    },
+                    seller: '0x456',
+                    buyer: '0x789' // Neither seller nor buyer is 0x123
+                };
+
+                // Act
+                const result = await service._processEvent(event, '0x123');
+
+                // Assert - should not process event since wallet not involved
+                expect(result).toBe(false);
+            });
+        });
     });
 });

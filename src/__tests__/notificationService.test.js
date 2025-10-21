@@ -1207,5 +1207,211 @@ describe('NotificationService', () => {
                 expect(result).toBeNull();
             });
         });
+
+        describe('Detailed verbosity for all event types', () => {
+            beforeEach(() => {
+                service = new NotificationService({ verbosity: 'detailed' });
+            });
+
+            describe('formatTransferEvent', () => {
+                it('should format transfer event with detailed verbosity', () => {
+                    // Arrange
+                    const event = {
+                        event_type: 'item_transferred',
+                        event_timestamp: '2024-01-01T12:00:00.000Z',
+                        payload: {
+                            item: {
+                                nft_id: 'ethereum/0xabcdef/123',
+                                metadata: { name: 'Transfer NFT' }
+                            },
+                            collection: { name: 'Transfer Collection', slug: 'transfer-coll' },
+                            from_account: { address: '0xfromaddress' },
+                            to_account: { address: '0xtoaddress' }
+                        }
+                    };
+
+                    // Act
+                    const result = service.formatTransferEvent(event);
+
+                    // Assert
+                    expect(result).toContain('═'.repeat(50));
+                    expect(result).toContain('[TRANSFER] item_transferred');
+                    expect(result).toContain('Time: 2024-01-01T12:00:00.000Z');
+                    expect(result).toContain('Collection: transfer-coll (Transfer Collection)');
+                    expect(result).toContain('NFT: Transfer NFT #123');
+                    expect(result).toContain('Contract: 0xabcdef');
+                    expect(result).toContain('Token ID: 123');
+                    expect(result).toContain('From: 0xfromaddress');
+                    expect(result).toContain('To: 0xtoaddress');
+                });
+
+                it('should handle missing timestamp in detailed transfer', () => {
+                    // Arrange
+                    const event = {
+                        event_type: 'item_transferred',
+                        payload: {
+                            item: {
+                                nft_id: 'ethereum/0xcontract/456',
+                                metadata: { name: 'No Time NFT' }
+                            },
+                            collection: { slug: 'no-time-coll' },
+                            from_account: { address: '0xfrom' },
+                            to_account: { address: '0xto' }
+                        }
+                    };
+
+                    // Act
+                    const result = service.formatTransferEvent(event);
+
+                    // Assert
+                    expect(result).toContain('Time:'); // Should have current timestamp
+                    expect(result).toContain('No Time NFT #456');
+                });
+            });
+
+            describe('formatListingEvent', () => {
+                it('should format listing event with detailed verbosity', () => {
+                    // Arrange
+                    const event = {
+                        event_type: 'item_listed',
+                        event_timestamp: '2024-01-01T15:30:00.000Z',
+                        chain: 'base',
+                        payload: {
+                            item: {
+                                nft_id: 'base/0x123456789/789',
+                                metadata: { name: 'Listing NFT' }
+                            },
+                            collection: { name: 'Listing Collection', slug: 'listing-coll' },
+                            base_price: '500000000000000000',
+                            maker: { address: '0xmaker' }
+                        }
+                    };
+
+                    // Act
+                    const result = service.formatListingEvent(event);
+
+                    // Assert
+                    expect(result).toContain('═'.repeat(50));
+                    expect(result).toContain('[LISTING] item_listed on Base');
+                    expect(result).toContain('Time: 2024-01-01T15:30:00.000Z');
+                    expect(result).toContain('Collection: listing-coll (Listing Collection)');
+                    expect(result).toContain('NFT: Listing NFT #789');
+                    expect(result).toContain('Contract: 0x123456789');
+                    expect(result).toContain('Token ID: 789');
+                    expect(result).toContain('Listing Price: 0.5 ETH (500000000000000000 wei)');
+                    expect(result).toContain('Seller: 0xmaker');
+                });
+
+                it('should handle listing with missing contract info', () => {
+                    // Arrange
+                    const event = {
+                        event_type: 'item_listed',
+                        payload: {
+                            item: { metadata: { name: 'No Contract NFT' } },
+                            collection: { slug: 'no-contract-coll' },
+                            base_price: '100000000000000000'
+                        }
+                    };
+
+                    // Act
+                    const result = service.formatListingEvent(event);
+
+                    // Assert
+                    expect(result).toContain('NFT: No Contract NFT #null');
+                    expect(result).toContain('Contract: N/A');
+                    expect(result).toContain('Token ID: null');
+                });
+            });
+
+            describe('formatBidEvent', () => {
+                it('should format collection bid with detailed verbosity', () => {
+                    // Arrange
+                    const event = {
+                        event_type: 'item_received_bid',
+                        event_timestamp: '2024-01-01T18:45:00.000Z',
+                        payload: {
+                            is_collection_offer: true,
+                            collection: { name: 'Bid Collection', slug: 'bid-coll' },
+                            base_price: '2000000000000000000',
+                            maker: { address: '0xbidder' }
+                        }
+                    };
+
+                    // Act
+                    const result = service.formatBidEvent(event);
+
+                    // Assert
+                    expect(result).toContain('═'.repeat(50));
+                    expect(result).toContain('[BID] item_received_bid on Ethereum');
+                    expect(result).toContain('Time: 2024-01-01T18:45:00.000Z');
+                    expect(result).toContain('Collection: bid-coll (Bid Collection)');
+                    expect(result).toContain('Collection-level offer');
+                    expect(result).toContain('Bid Amount: 2 ETH (2000000000000000000 wei)');
+                    expect(result).toContain('Bidder: 0xbidder');
+                });
+
+                it('should format individual NFT bid with detailed verbosity', () => {
+                    // Arrange
+                    const event = {
+                        event_type: 'item_received_bid',
+                        event_timestamp: '2024-01-01T20:00:00.000Z',
+                        chain: 'arbitrum',
+                        payload: {
+                            is_collection_offer: false,
+                            item: {
+                                nft_id: 'arbitrum/0xarbitrum/999',
+                                metadata: { name: 'Bid NFT' }
+                            },
+                            collection: { name: 'Bid NFT Collection', slug: 'bid-nft-coll' },
+                            base_price: '1500000000000000000',
+                            maker: { address: '0xbidder2' }
+                        }
+                    };
+
+                    // Act
+                    const result = service.formatBidEvent(event);
+
+                    // Assert
+                    expect(result).toContain('═'.repeat(50));
+                    expect(result).toContain('[BID] item_received_bid on Arbitrum');
+                    expect(result).toContain('NFT: Bid NFT #999');
+                    expect(result).toContain('Contract: 0xarbitrum');
+                    expect(result).toContain('Token ID: 999');
+                    expect(result).toContain('Bid Amount: 1.5 ETH (1500000000000000000 wei)');
+                    expect(result).toContain('Bidder: 0xbidder2');
+                });
+            });
+
+            describe('formatCancelEvent', () => {
+                it('should format cancel event with detailed verbosity', () => {
+                    // Arrange
+                    const event = {
+                        event_type: 'item_cancelled',
+                        event_timestamp: '2024-01-01T22:15:00.000Z',
+                        payload: {
+                            item: {
+                                nft_id: 'polygon/0xpolygon/555',
+                                metadata: { name: 'Cancelled NFT' }
+                            },
+                            collection: { name: 'Cancel Collection', slug: 'cancel-coll' },
+                            maker: { address: '0xcanceler' }
+                        }
+                    };
+
+                    // Act
+                    const result = service.formatCancelEvent(event);
+
+                    // Assert
+                    expect(result).toContain('═'.repeat(50));
+                    expect(result).toContain('[CANCEL] item_cancelled');
+                    expect(result).toContain('Time: 2024-01-01T22:15:00.000Z');
+                    expect(result).toContain('Collection: cancel-coll (Cancel Collection)');
+                    expect(result).toContain('NFT: Cancelled NFT #555');
+                    expect(result).toContain('Contract: 0xpolygon');
+                    expect(result).toContain('Token ID: 555');
+                    expect(result).toContain('Cancelled By: 0xcanceler');
+                });
+            });
+        });
     });
 });
