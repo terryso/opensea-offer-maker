@@ -54,9 +54,24 @@ OPENSEA_API_KEY=your_api_key
 ALCHEMY_API_KEY=your_alchemy_api_key
 ```
 
-2. Set up your private key securely:
+2. Configure secure encryption parameters (IMPORTANT):
+
+Copy the encryption configuration from `.env.example` to your `.env` file:
+
 ```bash
-# Initialize your private key (will be encrypted)
+# Encryption Configuration (Required for security)
+ENCRYPTION_PASSWORD=your_secure_password_minimum_32_characters
+ENCRYPTION_SALT=your_unique_salt_minimum_16_characters
+ENCRYPTION_ITERATIONS=32768
+ENCRYPTION_MEMORY=134217728
+ENCRYPTION_PARALLELISM=1
+```
+
+⚠️ **Security Note**: The encryption configuration protects your private keys. Use strong, unique values and store them securely.
+
+3. Set up your private key securely:
+```bash
+# Initialize your private key (will be encrypted with your new configuration)
 node src/cli.js key setup
 
 # Verify your key setup
@@ -67,6 +82,75 @@ The private key will be encrypted and stored locally. You can also use a tempora
 ```bash
 node src/cli.js send -t eth --private-key 0xYourPrivateKey ...
 ```
+
+### Security Migration (v0.0.6 → v0.0.7)
+
+If you're upgrading from a version before v0.0.7, your encrypted keys will be **automatically migrated** to use the new secure encryption system.
+
+#### What happens during migration?
+
+1. **Automatic Detection**: The system detects if you have old-format encrypted keys
+2. **Backup Creation**: A backup of your existing `.keys` file is created with timestamp
+3. **Key Re-encryption**: All keys are decrypted with old parameters and re-encrypted with your new secure configuration
+4. **Format Update**: Key file format is updated to version 2.0 with metadata
+5. **Verification**: All migrated keys are verified to work correctly
+
+#### Migration Requirements
+
+Before migration, ensure you have:
+
+```bash
+# 1. Set your encryption configuration in .env
+ENCRYPTION_PASSWORD=your_secure_password_min_32_chars
+ENCRYPTION_SALT=your_unique_salt_min_16_chars
+
+# 2. The correct original .keys file (do not modify it)
+# 3. Sufficient disk space for backup files
+```
+
+#### Migration Process
+
+Migration happens automatically when you first run any command that accesses your keys:
+
+```bash
+# Any of these commands will trigger migration if needed:
+node src/cli.js key list
+node src/cli.js offer -c some-collection -o 0.1
+node src/cli.js balance
+```
+
+**Migration Output Example:**
+```
+⚠️  Legacy key format detected. Starting migration...
+✅ Created backup file: .keys.backup.2025-01-21T10-30-00-000Z
+🔄 Migrating key 1/1: default
+✅ Successfully migrated key: default
+✅ Key file migration completed successfully.
+```
+
+#### Post-Migration
+
+- ✅ Your keys are now protected with AES-256-GCM encryption
+- ✅ Decryption attempts are rate-limited for brute force protection
+- ✅ All sensitive data is cleared from memory after use
+- ✅ Your backup file is safely stored (you can delete it after verification)
+
+#### Troubleshooting Migration
+
+**Migration Fails:**
+1. Check that your `.env` file contains valid encryption configuration
+2. Ensure your `.keys` file is not corrupted
+3. Try restoring from backup if available
+
+**Keys Not Working After Migration:**
+1. Verify your encryption configuration matches what you set in `.env`
+2. Check for any error messages during migration
+3. Use `node src/cli.js key test` to verify key access
+
+**Still Having Issues?**
+- Check the backup file created during migration
+- Review your `.env` encryption configuration
+- Delete the migrated `.keys` file and try again with correct configuration
 
 ## Usage
 
