@@ -1,16 +1,41 @@
 # OpenSea Offer Maker
 
-A command-line tool for creating and managing offers on OpenSea. Supports multiple chains (Ethereum, Base, Sepolia).
+A comprehensive command-line tool for NFT trading and portfolio management on OpenSea. Supports multiple chains (Ethereum, Base, Arbitrum, Polygon, Ronin, ApeChain, Sepolia).
 
 ## Features
-- Create collection and individual NFT offers
-- Automatic bidding with price range
-- Monitor current offers
-- Real-time NFT event monitoring (sales, listings, transfers, bids)
-- Event history and statistics
-- Support for multiple chains
-- Real-time offer tracking
-- Secure private key management
+- **Offer Management**: Create collection and individual NFT offers with smart pricing strategies
+- **Auto Bidding**: Automated bidding with configurable price ranges and floor price protection
+- **NFT Trading**: Buy NFTs and list them for sale across marketplaces
+- **Portfolio Management**: Track balances and manage multi-token assets
+- **Real-time Monitoring**: Monitor NFT events (sales, listings, transfers, bids) with instant notifications
+- **Smart Caching**: Cache wallet NFTs for interactive selection and quick access
+- **Multi-Chain Support**: Operate seamlessly across 7 different blockchain networks
+- **Secure Wallet**: AES-256-GCM encrypted private key management
+- **Token Swapping**: Convert between ETH and WETH instantly
+- **Cross-Chain Operations**: Unified experience across all supported chains
+
+## Quick Start
+
+```bash
+# 1. Install
+git clone https://github.com/yourusername/opensea-offer-maker.git
+cd opensea-offer-maker
+npm install
+
+# 2. Configure API Keys
+echo "OPENSEA_API_KEY=your_api_key" > .env
+echo "ALCHEMY_API_KEY=your_alchemy_api_key" >> .env
+
+# 3. Add Your Wallet
+node src/cli.js key add my-wallet
+
+# 4. Cache Your NFTs
+node src/cli.js cache refresh
+
+# 5. Start Trading!
+node src/cli.js list --interactive  # List NFTs for sale
+node src/cli.js monitor start       # Monitor your portfolio
+```
 
 ## Installation
 
@@ -50,7 +75,10 @@ node src/cli.js send -t eth --private-key 0xYourPrivateKey ...
 # Add a new private key with a name
 node src/cli.js key add my-key
 
-# List all stored keys
+# Add a key with interactive name prompt
+node src/cli.js key add
+
+# List all stored keys with addresses
 node src/cli.js key list
 
 # Switch active key
@@ -59,12 +87,18 @@ node src/cli.js key use my-key
 # Remove a stored key
 node src/cli.js key remove my-key
 
-# Test key decryption
+# Test key decryption and wallet access
 node src/cli.js key test
 
 # Use temporary private key for any command
 --private-key <key>
 ```
+
+**Security Notes:**
+- Private keys are encrypted with AES-256-GCM
+- Keys are stored in `.keys` file (gitignored)
+- Each key shows the associated wallet address
+- You can have multiple named keys for different wallets
 
 ### Managing Default Chain
 ```bash
@@ -106,6 +140,71 @@ node src/cli.js check -c collection_slug
 
 # View offers on specific chain
 node src/cli.js check -c collection_slug --chain ethereum
+```
+
+### NFT Caching
+
+Cache your wallet's NFTs for interactive selection and quick access.
+
+#### Refresh Cache
+```bash
+# Cache all NFTs from your wallet
+node src/cli.js cache refresh
+
+# Cache on specific chain
+node src/cli.js cache refresh --chain base
+```
+
+#### Manage Cache
+```bash
+# List cached NFTs
+node src/cli.js cache list
+
+# Show cache status
+node src/cli.js cache status
+
+# Clear cache
+node src/cli.js cache clear
+```
+
+#### Collection Filters
+```bash
+# Add collection to ignore list
+node src/cli.js cache filter add worthless-collection
+
+# Remove from ignore list
+node src/cli.js cache filter remove worthless-collection
+
+# List ignored collections
+node src/cli.js cache filter list
+
+# Clear all filters
+node src/cli.js cache filter clear
+```
+
+### Buy NFTs
+
+Purchase NFTs directly from the command line.
+
+#### Buy Specific NFT
+```bash
+# Buy a specific NFT
+node src/cli.js buy -a contract_address -t token_id
+
+# Buy with maximum price limit
+node src/cli.js buy -a contract_address -t token_id -m 0.1
+
+# Buy without confirmation prompt
+node src/cli.js buy -a contract_address -t token_id --skip-confirm
+```
+
+#### Buy Floor NFT
+```bash
+# Buy cheapest NFT from collection
+node src/cli.js buy -c collection_slug
+
+# Buy floor NFT with price limit
+node src/cli.js buy -c collection_slug -m 0.05
 ```
 
 ### Create Offers
@@ -315,9 +414,33 @@ node src/cli.js key setup --debug
 ```
 
 ## Supported Chains
-- Ethereum Mainnet (--chain ethereum)
-- Base (--chain base)
-- Sepolia (--chain sepolia)
+- **Ethereum Mainnet** (--chain ethereum) - ETH, WETH
+- **Base** (--chain base) - ETH, WETH
+- **Arbitrum One** (--chain arbitrum) - ETH, WETH
+- **Polygon** (--chain polygon) - MATIC, WETH
+- **Ronin** (--chain ronin) - RON, WETH
+- **ApeChain** (--chain apechain) - APE, WETH
+- **Sepolia Testnet** (--chain sepolia) - ETH, WETH
+
+Use `node src/cli.js chain list` to see all supported chains and their configurations.
+
+## Documentation
+
+For detailed technical documentation and architecture information:
+
+- **[Product Requirements Document](docs/prd.md)** - Complete product specification
+- **[Architecture Documentation](docs/architecture.md)** - System architecture and design
+- **[Epic Documentation](docs/prd/)** - Detailed feature specifications:
+  - [Epic 1: Core Offer Making System](docs/prd/epic-1-core-offer-system.md)
+  - [Epic 2: NFT Wallet Cache](docs/prd/epic-2-nft-cache.md)
+  - [Epic 3: NFT Monitoring](docs/prd/epic-3-nft-monitoring.md)
+  - [Epic 4: NFT Trading & Portfolio Management](docs/prd/epic-4-nft-trading-portfolio.md)
+  - [Epic 5: Wallet & Key Management](docs/prd/epic-5-wallet-key-management.md)
+  - [Epic 6: Multi-Chain Infrastructure](docs/prd/epic-6-multichain-infrastructure.md)
+
+## Contributing
+
+This project follows BMAD™ Core methodology for product development and documentation.
 
 ## License
 MIT
