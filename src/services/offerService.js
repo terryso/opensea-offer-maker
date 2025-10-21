@@ -1,14 +1,16 @@
 import { ethers } from 'ethers';
 import { WETH_ABI } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { ValidationError, ConfigurationError, NetworkError, wrapError } from '../utils/errors.js';
+import { ErrorHandler } from '../utils/errorHandler.js';
 
 export class OfferService {
   constructor(sdk, chainConfig) {
     if (!sdk) {
-      throw new Error('SDK is required');
+      throw new ValidationError('SDK is required', 'sdk');
     }
     if (!chainConfig || !chainConfig.wethAddress) {
-      throw new Error('Chain config with WETH address is required');
+      throw new ConfigurationError('Chain config with WETH address is required', 'wethAddress');
     }
     this.sdk = sdk;
     this.provider = sdk.provider;
@@ -16,7 +18,11 @@ export class OfferService {
 
     // 验证 WETH 地址
     if (!ethers.isAddress(this.chainConfig.wethAddress)) {
-      throw new Error(`Invalid WETH address: ${this.chainConfig.wethAddress}`);
+      throw new ConfigurationError(
+        'Invalid WETH address format',
+        'wethAddress',
+        { address: this.chainConfig.wethAddress }
+      );
     }
 
     // 创建 WETH 合约实例
@@ -36,21 +42,32 @@ export class OfferService {
   // Core business logic
   validateBalance(balanceInWETH, offerAmount) {
     if (parseFloat(balanceInWETH) < parseFloat(offerAmount)) {
-      throw new Error('Insufficient WETH balance');
+      throw new ValidationError(
+        'Insufficient WETH balance for this offer',
+        'balance',
+        {
+          currentBalance: balanceInWETH,
+          requiredAmount: offerAmount,
+          difference: parseFloat(offerAmount) - parseFloat(balanceInWETH)
+        }
+      );
     }
     return true;
   }
 
   validateCollectionOffer(collectionSlug) {
     if (!collectionSlug) {
-      throw new Error('Collection slug is required for collection offer');
+      throw new ValidationError('Collection slug is required for collection offer', 'collectionSlug');
     }
     return true;
   }
 
   validateIndividualOffer(tokenAddress, tokenId) {
-    if (!tokenAddress || !tokenId) {
-      throw new Error('Token address and token ID are required for individual offer');
+    if (!tokenAddress) {
+      throw new ValidationError('Token address is required for individual offer', 'tokenAddress');
+    }
+    if (!tokenId) {
+      throw new ValidationError('Token ID is required for individual offer', 'tokenId');
     }
     return true;
   }
@@ -74,7 +91,7 @@ export class OfferService {
     } = params;
 
     if (!walletAddress) {
-      throw new Error('Wallet address is required for creating collection offer');
+      throw new ValidationError('Wallet address is required for creating collection offer', 'walletAddress');
     }
 
     try {
@@ -83,7 +100,7 @@ export class OfferService {
       logger.debug('Creating collection offer:', {
         collectionSlug,
         offerAmount,
-        walletAddress,
+        walletAddress: walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4),
         wethAddress: this.wethContract.target
       });
 
@@ -109,8 +126,13 @@ export class OfferService {
       this.logCollectionOfferDetails(response, collectionSlug, orderHash);
       return orderHash;
     } catch (error) {
-      logger.error('Failed to create collection offer:', error);
-      throw error;
+      throw ErrorHandler.wrap(error, {
+        service: 'OfferService',
+        method: 'createCollectionOffer',
+        collectionSlug,
+        offerAmount,
+        walletAddress: walletAddress ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4) : null
+      });
     }
   }
 

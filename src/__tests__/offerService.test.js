@@ -127,15 +127,15 @@ describe('OfferService', () => {
         });
 
         it('should throw error when token address is missing', () => {
-            expect(() => service.validateIndividualOffer(null, '123')).toThrow('Token address and token ID are required for individual offer');
+            expect(() => service.validateIndividualOffer(null, '123')).toThrow('Token address is required for individual offer');
         });
 
         it('should throw error when token ID is missing', () => {
-            expect(() => service.validateIndividualOffer('0xabc', null)).toThrow('Token address and token ID are required for individual offer');
+            expect(() => service.validateIndividualOffer('0xabc', null)).toThrow('Token ID is required for individual offer');
         });
 
         it('should throw error when both are missing', () => {
-            expect(() => service.validateIndividualOffer()).toThrow('Token address and token ID are required for individual offer');
+            expect(() => service.validateIndividualOffer()).toThrow('Token address is required for individual offer');
         });
 
         it('should return true when both are provided', () => {
@@ -342,7 +342,7 @@ describe('OfferService', () => {
                 walletAddress: '0xabc'
             };
 
-            await expect(service.createIndividualOffer(params)).rejects.toThrow('Token address and token ID are required');
+            await expect(service.createIndividualOffer(params)).rejects.toThrow('Token address is required for individual offer');
         });
 
         it('should throw error when tokenId is missing', async () => {
@@ -352,7 +352,7 @@ describe('OfferService', () => {
                 walletAddress: '0xabc'
             };
 
-            await expect(service.createIndividualOffer(params)).rejects.toThrow('Token address and token ID are required');
+            await expect(service.createIndividualOffer(params)).rejects.toThrow('Token ID is required for individual offer');
         });
     });
 });

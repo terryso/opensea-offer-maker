@@ -1260,4 +1260,4 @@ describe('OpenSeaApi', () => {
                 .toThrow('Floor price not available');
         });
     });
-}); 
+});

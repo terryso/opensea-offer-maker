@@ -3,6 +3,8 @@ import { OpenSeaSDK } from 'opensea-js';
 import { logger, LogLevel } from '../utils/logger.js';
 import { OPENSEA_API_KEY } from '../config.js';
 import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
+import { ValidationError } from '../utils/errors.js';
+import { CommandErrorMiddleware } from '../utils/errorHandler.js';
 
 export const offerCommand = new Command('offer')
   .description('Create an offer for a single NFT or collection')
@@ -33,19 +35,19 @@ offerCommand.action(async (options) => {
 
     // Validate parameters
     if (!options.collection && (!options.address || !options.tokenId)) {
-      throw new Error('Must provide collection slug or NFT contract address and token ID');
+      throw new ValidationError('Must provide collection slug or NFT contract address and token ID');
     }
 
     if (options.collection && (options.address || options.tokenId)) {
-      throw new Error('Cannot provide both collection and NFT parameters');
+      throw new ValidationError('Cannot provide both collection and NFT parameters');
     }
 
     if ((options.traitType && !options.traitValue) || (!options.traitType && options.traitValue)) {
-      throw new Error('Must provide both trait type and value or neither');
+      throw new ValidationError('Must provide both trait type and value or neither');
     }
 
     if (options.traitType && !options.collection) {
-      throw new Error('Trait criteria can only be used with collection offers');
+      throw new ValidationError('Trait criteria can only be used with collection offers');
     }
 
     const expirationTime = Math.round(Date.now() / 1000 + parseInt(options.expirationMinutes) * 60);
@@ -97,7 +99,6 @@ offerCommand.action(async (options) => {
     logger.info(`Order hash: ${offer.orderHash}`);
 
   } catch (error) {
-    logger.error('Offer creation failed:', error);
-    process.exit(1);
+    CommandErrorMiddleware.handler('offer')(error);
   }
 });
