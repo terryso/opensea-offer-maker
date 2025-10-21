@@ -9,4 +9,4 @@ export { keyCommand } from './keyCommand.js';
 export { balanceCommand } from './balanceCommand.js';
 export { chainCommand } from './chainCommand.js';
 export { cacheCommand } from './cacheCommand.js';
-export { monitorCommand } from './monitorCommand.js'; 
+export { monitorCommand } from './monitorCommand.js';

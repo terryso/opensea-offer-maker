@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // 创建真实的配置
-const provider = new ethers.AlchemyProvider("base", process.env.ALCHEMY_API_KEY);
+const provider = new ethers.AlchemyProvider('base', process.env.ALCHEMY_API_KEY);
 const wallet = new ethers.Wallet(process.env.WALLET_PRIV_KEY, provider);
 const sdk = new OpenSeaSDK(wallet, {
     chain: Chain.Base,
@@ -87,4 +87,4 @@ describe('OfferService Integration', () => {
                 .toBeTruthy(); // 应该抛出错误
         });
     });
-}); 
+});

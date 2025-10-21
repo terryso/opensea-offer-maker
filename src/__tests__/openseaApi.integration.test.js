@@ -39,7 +39,7 @@ describe('OpenSeaApi Integration', () => {
 
             expect(result).toBeDefined();
             expect(result.offers).toBeDefined();
-            
+
             if (result.offers && result.offers.length > 0) {
                 const offer = result.offers[0];
                 expect(offer).toMatchObject({
@@ -95,7 +95,7 @@ describe('OpenSeaApi Integration', () => {
 
             expect(result).toBeDefined();
             expect(result.orders).toBeDefined();
-            
+
             if (result.orders.length > 0) {
                 const offer = result.orders[0];
                 expect(offer).toMatchObject({
@@ -123,7 +123,7 @@ describe('OpenSeaApi Integration', () => {
     describe('Error Handling', () => {
         it('should handle invalid API key', async () => {
             const invalidApi = new OpenSeaApi('invalid-key', OPENSEA_API_BASE_URL);
-            
+
             await expect(invalidApi.getCollectionOffers(TEST_COLLECTION.contractAddress))
                 .rejects
                 .toThrow('Invalid API key');
@@ -139,7 +139,7 @@ describe('OpenSeaApi Integration', () => {
     describe('Response Format', () => {
         it('should return properly formatted collection offers', async () => {
             const result = await api.getCollectionOffers(TEST_COLLECTION.contractAddress);
-            
+
             if (result.offers && result.offers.length > 0) {
                 const offer = result.offers[0];
                 // Only log this in debug mode
@@ -164,7 +164,7 @@ describe('OpenSeaApi Integration', () => {
                 TEST_NFT.contractAddress,
                 TEST_NFT.tokenId
             );
-            
+
             if (result.orders && result.orders.length > 0) {
                 const offer = result.orders[0];
                 console.log('NFT Offer Format:', {
@@ -183,4 +183,4 @@ describe('OpenSeaApi Integration', () => {
             }
         }, 30000);
     });
-}); 
+});

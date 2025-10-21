@@ -6,19 +6,19 @@ import enquirer from 'enquirer';
 const { prompt } = enquirer;
 
 export const addChainOption = (command) => {
-    return command.option(
-        '--chain <chain>',
-        `Chain to use (${Object.keys(SUPPORTED_CHAINS).join(', ')})`,
-        DEFAULT_CHAIN
-    );
+  return command.option(
+    '--chain <chain>',
+    `Chain to use (${Object.keys(SUPPORTED_CHAINS).join(', ')})`,
+    DEFAULT_CHAIN
+  );
 };
 
 export const validateChain = (chainName) => {
-    const chainConfig = SUPPORTED_CHAINS[chainName];
-    if (!chainConfig) {
-        throw new Error(`Unsupported chain: ${chainName}`);
-    }
-    return chainConfig;
+  const chainConfig = SUPPORTED_CHAINS[chainName];
+  if (!chainConfig) {
+    throw new Error(`Unsupported chain: ${chainName}`);
+  }
+  return chainConfig;
 };
 
 /**
@@ -27,60 +27,60 @@ export const validateChain = (chainName) => {
  * @returns {Promise<Object>} Chain configuration
  */
 export const getEffectiveChain = async (options) => {
-    let chainName = options.chain;
+  let chainName = options.chain;
 
-    // Only use configured default if user didn't explicitly provide --chain
-    // Check process.argv to see if --chain was explicitly provided
-    const chainExplicitlyProvided = process.argv.includes('--chain');
-    
-    if (!chainExplicitlyProvided) {
-        const configuredChain = await ConfigManager.getDefaultChain();
-        if (configuredChain) {
-            chainName = configuredChain;
-        }
+  // Only use configured default if user didn't explicitly provide --chain
+  // Check process.argv to see if --chain was explicitly provided
+  const chainExplicitlyProvided = process.argv.includes('--chain');
+
+  if (!chainExplicitlyProvided) {
+    const configuredChain = await ConfigManager.getDefaultChain();
+    if (configuredChain) {
+      chainName = configuredChain;
     }
+  }
 
-    return validateChain(chainName);
+  return validateChain(chainName);
 };
 
 // 添加私钥选项
 export const addPrivateKeyOption = (command) => {
-    return command.option(
-        '--private-key <key>',
-        'Private key to use for transaction (overrides WALLET_PRIV_KEY in .env)'
-    );
+  return command.option(
+    '--private-key <key>',
+    'Private key to use for transaction (overrides WALLET_PRIV_KEY in .env)'
+  );
 };
 
 // 获取钱包实例
 export const getWallet = async (options) => {
-    let privateKey = options.privateKey;
+  let privateKey = options.privateKey;
 
-    if (!privateKey) {
-        if (!await KeyManager.isKeyStored()) {
-            throw new Error('No private key stored. Please run "key setup" first or provide --private-key');
-        }
-        privateKey = await KeyManager.decryptKey();
+  if (!privateKey) {
+    if (!await KeyManager.isKeyStored()) {
+      throw new Error('No private key stored. Please run "key setup" first or provide --private-key');
     }
+    privateKey = await KeyManager.decryptKey();
+  }
 
-    // 根据指定的链创建 provider（考虑用户配置的默认链）
-    const chainConfig = await getEffectiveChain(options);
-    
-    let provider;
-    
-    // 如果链支持 Alchemy,使用 AlchemyProvider
-    if (chainConfig.alchemyNetwork && process.env.ALCHEMY_API_KEY) {
-        provider = new ethers.AlchemyProvider(
-            chainConfig.alchemyNetwork,
-            process.env.ALCHEMY_API_KEY
-        );
-    } else {
-        // 否则使用 JsonRpcProvider
-        const rpcUrl = chainConfig.rpcUrl + (process.env.ALCHEMY_API_KEY || '');
-        provider = new ethers.JsonRpcProvider(rpcUrl, {
-            chainId: chainConfig.chainId,
-            name: chainConfig.name
-        });
-    }
+  // 根据指定的链创建 provider（考虑用户配置的默认链）
+  const chainConfig = await getEffectiveChain(options);
 
-    return new ethers.Wallet(privateKey, provider);
-}; 
+  let provider;
+
+  // 如果链支持 Alchemy,使用 AlchemyProvider
+  if (chainConfig.alchemyNetwork && process.env.ALCHEMY_API_KEY) {
+    provider = new ethers.AlchemyProvider(
+      chainConfig.alchemyNetwork,
+      process.env.ALCHEMY_API_KEY
+    );
+  } else {
+    // 否则使用 JsonRpcProvider
+    const rpcUrl = chainConfig.rpcUrl + (process.env.ALCHEMY_API_KEY || '');
+    provider = new ethers.JsonRpcProvider(rpcUrl, {
+      chainId: chainConfig.chainId,
+      name: chainConfig.name
+    });
+  }
+
+  return new ethers.Wallet(privateKey, provider);
+};

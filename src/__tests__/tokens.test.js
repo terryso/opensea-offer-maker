@@ -139,13 +139,13 @@ describe('tokens', () => {
                 ['ethereum', 'base', 'arbitrum', 'sepolia'].forEach(chain => {
                     expect(SUPPORTED_TOKENS[chain].eth.isNative).toBe(true);
                 });
-                
+
                 // ronin uses RON as native
                 expect(SUPPORTED_TOKENS.ronin.ron.isNative).toBe(true);
-                
+
                 // polygon uses MATIC as native
                 expect(SUPPORTED_TOKENS.polygon.matic.isNative).toBe(true);
-                
+
                 // apechain uses APE as native
                 expect(SUPPORTED_TOKENS.apechain.ape.isNative).toBe(true);
             });

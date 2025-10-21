@@ -9,9 +9,9 @@ export { OPENSEA_API_KEY, ALCHEMY_API_KEY };
 
 // Validate environment variables
 if (!OPENSEA_API_KEY || !ALCHEMY_API_KEY) {
-    const error = new Error("Missing environment variables. Please set OPENSEA_API_KEY and ALCHEMY_API_KEY.");
-    error.code = 'ENV_MISSING';
-    throw error;
+  const error = new Error('Missing environment variables. Please set OPENSEA_API_KEY and ALCHEMY_API_KEY.');
+  error.code = 'ENV_MISSING';
+  throw error;
 }
 
 // Re-export chain configurations
@@ -26,27 +26,27 @@ export const OPENSEA_SEAPORT_ADDRESS = '0x00000000000000ADc04C56Bf30aC9d3c0aAF14
 
 // WETH ABI
 export const WETH_ABI = [
-    // Read-only functions
-    "function balanceOf(address owner) view returns (uint256)",
-    "function decimals() view returns (uint8)",
-    "function symbol() view returns (string)",
-    
-    // Write functions
-    "function deposit() payable",
-    "function withdraw(uint256 wad)",
-    "function approve(address guy, uint256 wad) returns (bool)",
-    "function transfer(address dst, uint256 wad) returns (bool)",
-    
-    // Events
-    "event Deposit(address indexed dst, uint256 wad)",
-    "event Withdrawal(address indexed src, uint256 wad)",
-    "event Approval(address indexed src, address indexed guy, uint256 wad)",
-    "event Transfer(address indexed src, address indexed dst, uint256 wad)"
-]; 
+  // Read-only functions
+  'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+
+  // Write functions
+  'function deposit() payable',
+  'function withdraw(uint256 wad)',
+  'function approve(address guy, uint256 wad) returns (bool)',
+  'function transfer(address dst, uint256 wad) returns (bool)',
+
+  // Events
+  'event Deposit(address indexed dst, uint256 wad)',
+  'event Withdrawal(address indexed src, uint256 wad)',
+  'event Approval(address indexed src, address indexed guy, uint256 wad)',
+  'event Transfer(address indexed src, address indexed dst, uint256 wad)'
+];
 
 // Supported marketplaces
 export const SUPPORTED_MARKETPLACES = {
-    ethereum: ['opensea'],
-    base: ['opensea'],
-    sepolia: ['opensea']
+  ethereum: ['opensea'],
+  base: ['opensea'],
+  sepolia: ['opensea']
 };

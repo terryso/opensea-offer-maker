@@ -3,9 +3,9 @@ import { bootstrap } from 'global-agent';
 
 // 设置代理环境变量（如果未设置）
 if (!process.env.GLOBAL_AGENT_HTTP_PROXY) {
-    const proxyUrl = process.env.HTTP_PROXY || process.env.HTTPS_PROXY || 'http://127.0.0.1:7890';
-    process.env.GLOBAL_AGENT_HTTP_PROXY = proxyUrl;
-    console.log(`[Global Agent] Setting proxy to: ${proxyUrl}`);
+  const proxyUrl = process.env.HTTP_PROXY || process.env.HTTPS_PROXY || 'http://127.0.0.1:7890';
+  process.env.GLOBAL_AGENT_HTTP_PROXY = proxyUrl;
+  console.log(`[Global Agent] Setting proxy to: ${proxyUrl}`);
 }
 
 // 启用全局代理（拦截所有 http/https 请求）
@@ -14,18 +14,18 @@ console.log('[Global Agent] Bootstrap completed');
 
 import { Command } from 'commander';
 import {
-    offerCommand,
-    autoOfferCommand,
-    checkOffersCommand,
-    listCommand,
-    buyCommand,
-    swapCommand,
-    sendCommand,
-    keyCommand,
-    balanceCommand,
-    chainCommand,
-    cacheCommand,
-    monitorCommand
+  offerCommand,
+  autoOfferCommand,
+  checkOffersCommand,
+  listCommand,
+  buyCommand,
+  swapCommand,
+  sendCommand,
+  keyCommand,
+  balanceCommand,
+  chainCommand,
+  cacheCommand,
+  monitorCommand
 } from './commands/index.js';
 import { setupEthersProxy } from './utils/proxySetup.js';
 
@@ -36,20 +36,20 @@ setupEthersProxy();
 const program = new Command();
 
 program
-    .name('opensea-offer-maker')
-    .description('OpenSea offer creation tool')
-    .version('1.0.0')
-    .addCommand(offerCommand)
-    .addCommand(autoOfferCommand)
-    .addCommand(checkOffersCommand)
-    .addCommand(listCommand)
-    .addCommand(buyCommand)
-    .addCommand(swapCommand)
-    .addCommand(sendCommand)
-    .addCommand(keyCommand)
-    .addCommand(balanceCommand)
-    .addCommand(chainCommand)
-    .addCommand(cacheCommand)
-    .addCommand(monitorCommand);
+  .name('opensea-offer-maker')
+  .description('OpenSea offer creation tool')
+  .version('1.0.0')
+  .addCommand(offerCommand)
+  .addCommand(autoOfferCommand)
+  .addCommand(checkOffersCommand)
+  .addCommand(listCommand)
+  .addCommand(buyCommand)
+  .addCommand(swapCommand)
+  .addCommand(sendCommand)
+  .addCommand(keyCommand)
+  .addCommand(balanceCommand)
+  .addCommand(chainCommand)
+  .addCommand(cacheCommand)
+  .addCommand(monitorCommand);
 
-program.parse(process.argv); 
+program.parse(process.argv);
