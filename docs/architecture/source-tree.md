@@ -1,6 +1,6 @@
 # 项目源代码结构
 
-## 目录树
+## 目录树（当前实际状态）
 
 ```
 opensea-offer-maker/
@@ -12,176 +12,296 @@ opensea-offer-maker/
 │   ├── templates/                  # 文档模板
 │   └── utils/                      # 框架工具
 ├── .claude/                        # Claude Code 配置
-├── .gemini/                        # Gemini 配置
-├── .windsurf/                      # Windsurf 配置
+├── .cache/                         # 文件缓存系统（运行时生成）
+│   ├── events/                     # 事件日志存储（JSONL格式）
+│   ├── nfts/                       # NFT元数据缓存
+│   └── filters/                    # 用户过滤器配置
 ├── .github/
 │   └── workflows/
-│       └── publish.yml             # NPM 发布工作流（⚠️ 集成测试已禁用）
+│       └── publish.yml             # NPM 发布工作流
 ├── coverage/                       # Jest 覆盖率报告（gitignored）
 ├── docs/
 │   ├── architecture/               # 架构文档（本目录）
+│   ├── prd/                        # 产品需求文档分片
+│   ├── qa/                         # 质量保证文档
+│   ├── stories/                    # 用户故事和开发任务
 │   ├── prd.md                      # 产品需求文档（中文）
 │   └── architecture.md             # 完整架构文档（英文原版）
 ├── node_modules/                   # NPM 依赖（gitignored）
-├── src/
-│   ├── __tests__/                  # 测试文件（⚠️ 覆盖率约 60%）
-│   │   ├── openseaApi.test.js              # 单元测试（模拟）
-│   │   ├── openseaApi.integration.test.js  # 集成测试（真实 API）
-│   │   └── offerService.integration.test.js
-│   ├── commands/                   # CLI 命令（共 9 个）
-│   │   ├── autoOfferCommand.js             # 自动竞价（2 个子命令）
-│   │   ├── checkOffersCommand.js           # 查询出价/统计
-│   │   ├── keyCommand.js                   # 密钥管理（6 个子命令）
-│   │   ├── listCommand.js                  # 跨市场挂单
-│   │   ├── offerCommand.js                 # 单次出价创建
-│   │   ├── scanCommand.js                  # 市场扫描
-│   │   ├── sendCommand.js                  # 代币转账
-│   │   ├── swapCommand.js                  # ETH/WETH 兑换
-│   │   ├── trendingCommand.js              # 热门集合
-│   │   └── index.js                        # 导出所有命令
-│   ├── config/
-│   │   └── tokens.js               # 代币配置（多链地址）
-│   ├── services/                   # 业务逻辑层
-│   │   ├── offerService.js                 # 出价创建封装
-│   │   ├── offerStrategy.js                # ⚠️ 自动竞价（复杂）
-│   │   ├── openseaApi.js                   # OpenSea API 封装
-│   │   ├── reservoirApi.js                 # Reservoir API 封装
-│   │   └── scanService.js                  # 市场扫描逻辑
-│   ├── utils/                      # 工具函数
-│   │   ├── commandUtils.js                 # 链验证、钱包创建
-│   │   ├── env.js                          # 环境变量导出
-│   │   ├── keyManager.js                   # ⚠️ 密钥加密（安全关键）
-│   │   └── logger.js                       # 日志工具
-│   ├── cli.js                      # CLI 入口点（Commander 设置）
-│   └── config.js                   # 主配置（链、环境验证）
-├── .env                            # ⚠️ 环境变量（用户创建，gitignored）
-├── .keys                           # ⚠️ 加密密钥存储（自动生成，gitignored）
-├── .gitignore                      # Git 忽略规则
-├── .npmignore                      # NPM 发布忽略（⚠️ 排除测试）
-├── babel.config.js                 # Jest 的 Babel 配置
-├── jest.config.js                  # Jest 配置
-├── package.json                    # NPM 包定义
-├── package-lock.json               # 锁定的依赖版本
-└── README.md                       # 用户文档
+├── src/                            # 源代码目录（17,843行代码）
+│   ├── __tests__/                  # 测试文件（84.36% 覆盖率）
+│   │   ├── commands/               # 命令层测试
+│   │   │   ├── offerCommand.test.js
+│   │   │   ├── autoOfferCommand.test.js
+│   │   │   ├── listCommand.test.js
+│   │   │   ├── monitorCommand.test.js
+│   │   │   ├── keyCommand.test.js
+│   │   │   ├── balanceCommand.test.js
+│   │   │   ├── chainCommand.test.js
+│   │   │   ├── cacheCommand.test.js
+│   │   │   ├── sendCommand.test.js
+│   │   │   ├── swapCommand.test.js
+│   │   │   ├── buyCommand.test.js
+│   │   │   ├── checkOffersCommand.test.js
+│   │   │   └── monitorCommand.integration.test.js
+│   │   ├── services/               # 服务层测试
+│   │   │   ├── offerStrategy.test.js
+│   │   │   ├── openseaApi.test.js
+│   │   │   ├── openseaApi.integration.test.js
+│   │   │   ├── offerService.integration.test.js
+│   │   │   ├── streamService.test.js
+│   │   │   ├── buyService.test.js
+│   │   │   └── cacheService.test.js
+│   │   ├── utils/                  # 工具层测试
+│   │   │   ├── configManager.test.js
+│   │   │   ├── configManager.integration.test.js
+│   │   │   ├── chains.test.js
+│   │   │   └── logger.test.js
+│   │   ├── config.test.js           # 配置测试
+│   │   └── jest.setup.js           # 测试环境配置
+│   ├── commands/                   # CLI 命令层（15个命令）
+│   │   ├── autoOfferCommand.js     # 自动竞价（5.9KB）
+│   │   ├── balanceCommand.js       # 余额查询（2.8KB）
+│   │   ├── buyCommand.js           # NFT购买（4.8KB）
+│   │   ├── cacheCommand.js         # 缓存管理（17.0KB）
+│   │   ├── chainCommand.js         # 链配置（1.7KB）
+│   │   ├── checkOffersCommand.js   # 出价查询（5.0KB）
+│   │   ├── index.js                # 命令导出（614B）
+│   │   ├── keyCommand.js           # 密钥管理（7.9KB）
+│   │   ├── listCommand.js          # 跨市场挂单（51.7KB - 最大文件）
+│   │   ├── monitorCommand.js       # 实时监控（12.9KB）
+│   │   ├── offerCommand.js         # 单次出价（3.8KB）
+│   │   ├── sendCommand.js          # 代币转账（3.1KB）
+│   │   └── swapCommand.js          # ETH/WETH兑换（4.8KB）
+│   ├── config/                     # 配置数据
+│   │   └── tokens.js               # 多链代币配置
+│   ├── constants/                  # 系统常量
+│   │   └── chains.js               # 6条链配置（131行）
+│   ├── services/                   # 业务逻辑层（8个核心服务）
+│   │   ├── buyService.js           # NFT购买服务（10.7KB）
+│   │   ├── cacheService.js         # 缓存服务（14.2KB）
+│   │   ├── notificationService.js  # 通知系统（23.9KB）
+│   │   ├── offerService.js         # 出价服务（5.1KB）
+│   │   ├── offerStrategy.js        # 策略引擎（13.0KB）
+│   │   ├── openseaApi.js           # OpenSea API封装（33.1KB - 最大服务文件）
+│   │   ├── pollingMonitorService.js # 轮询监控（25.9KB）
+│   │   └── streamService.js        # 流式服务（12.6KB）
+│   ├── utils/                      # 基础设施层（6个工具类）
+│   │   ├── commandUtils.js         # 命令工具（链/钱包管理）
+│   │   ├── configManager.js        # 配置管理
+│   │   ├── env.js                  # 环境变量验证
+│   │   ├── keyManager.js           # 密钥管理器（安全关键）
+│   │   ├── logger.js               # 日志系统
+│   │   └── proxySetup.js           # 代理配置
+│   ├── cli.js                      # CLI入口点（全局代理配置）
+│   └── config.js                   # 主配置文件（环境变量验证）
+├── .env                            # 环境变量配置（gitignored）
+├── .env.example                    # 环境变量模板
+├── .keys                           # 加密私钥存储（gitignored）
+├── .gitignore                      # Git忽略规则
+├── jest.setup.js                   # Jest测试配置
+├── LICENSE                         # 开源许可证
+├── package.json                    # NPM包配置和依赖
+├── package-lock.json               # 依赖锁定文件
+└── README.md                       # 项目说明文档
 ```
 
-## 关键目录说明
+## 代码组织原则
 
-### `src/commands/`
-每个文件对应一个 CLI 命令（遵循 Commander.js 模式）
+### 分层架构
 
-**职责**：
-- 定义命令行接口（参数、选项、帮助文本）
-- 参数验证和解析
-- 调用服务层执行业务逻辑
-- 处理错误并向用户显示结果
+代码按照四层架构组织：
 
-### `src/services/`
-业务逻辑与 CLI 关注点分离
+1. **表现层** (`src/commands/`)
+   - CLI 命令定义和参数处理
+   - 用户交互和响应格式化
+   - 15个主要命令，覆盖完整的 NFT 交易流程
 
-**职责**：
-- 实现核心功能逻辑
-- 协调多个 API 调用
-- 处理复杂的业务规则
-- 提供可复用的服务接口
+2. **业务逻辑层** (`src/services/`)
+   - 核心业务逻辑和算法实现
+   - 外部 API 集成和数据处理
+   - 8个核心服务，84.36% 测试覆盖率
 
-### `src/utils/`
-跨命令/服务使用的共享工具
+3. **数据访问层** (`src/config/`, `src/constants/`)
+   - 配置数据和常量定义
+   - 多链支持和代币配置
+   - 环境特定的参数管理
 
-**职责**：
-- 通用辅助函数
-- 配置管理
-- 日志记录
-- 密钥加密/解密
+4. **基础设施层** (`src/utils/`)
+   - 通用工具和辅助函数
+   - 安全、日志、配置管理
+   - 跨层共享的基础服务
 
-### `.bmad-core/`、`.claude/`、`.gemini/`、`.windsurf/`
-AI 开发工具配置（不属于运行时）
+### 命名约定
 
-**说明**：这些目录包含 AI 辅助开发工具的配置，不参与实际运行。
+- **文件命名**：camelCase（JavaScript 标准）
+- **类命名**：PascalCase（ES6 类标准）
+- **函数命名**：camelCase，动词开头
+- **常量命名**：UPPER_SNAKE_CASE
+- **配置文件**：kebab-case 或 camelCase
 
-## ⚠️ 关键文件
+### 模块依赖规则
 
-### 必须注意的文件
+- **上层依赖下层**：Commands → Services → Utils
+- **避免循环依赖**：严格的依赖方向
+- **接口抽象**：服务间通过明确接口交互
+- **配置注入**：依赖通过构造函数注入
 
-1. **`.env`** - 必须由用户手动创建
-   - 包含 API 密钥（OpenSea、Alchemy 等）
-   - 不在版本控制中
-   - 参见 README.md 获取模板
+## 关键目录详解
 
-2. **`.keys`** - 自动生成，包含加密的私钥
-   - 由 `key add` 命令创建
-   - 使用 AES-256-GCM 加密
-   - ⚠️ 加密密钥在源代码中硬编码（安全问题）
+### `/src/commands/` - 命令层
 
-3. **`src/utils/keyManager.js`** - 安全关键，谨慎修改
-   - 处理私钥加密/解密
-   - 修改可能导致用户无法访问密钥
-   - 格式变更会破坏现有密钥存储
+**职责**：CLI 接口定义，用户输入处理，业务逻辑协调
 
-4. **`src/services/offerStrategy.js`** - 代码库中最复杂的逻辑
-   - 自动竞价策略实现
-   - 使用 `process.exit()` 关闭
-   - 错误处理返回 null 并继续
-   - 一次只能监控一个集合
+**关键文件**：
+- `listCommand.js` (51.7KB) - 最复杂的命令，交互式 NFT 挂单
+- `cacheCommand.js` (17.0KB) - 缓存管理和操作
+- `monitorCommand.js` (12.9KB) - 实时监控命令
+- `autoOfferCommand.js` (5.9KB) - 自动竞价功能
 
-## 文件组织原则
+**模式**：
+- 每个命令文件导出一个 Commander.js Command 实例
+- 统一的错误处理和用户反馈
+- 可选的调试模式和详细日志
 
-### 命令层（Commands）
-- 一个文件 = 一个主命令
-- 可能包含子命令（如 `key` 有 6 个子命令）
-- 不包含业务逻辑，仅协调
+### `/src/services/` - 业务逻辑层
 
-### 服务层（Services）
-- 封装外部 API
-- 实现业务规则
-- 可被多个命令使用
-- 与 CLI 框架解耦
+**职责**：核心业务逻辑，API 集成，数据处理，状态管理
 
-### 工具层（Utils）
-- 纯函数优先
-- 无状态（KeyManager 除外，需要文件 I/O）
-- 广泛可复用
+**关键文件**：
+- `openseaApi.js` (33.1KB) - OpenSea API v2 完整封装
+- `notificationService.js` (23.9KB) - 通知和事件处理
+- `pollingMonitorService.js` (25.9KB) - 轮询监控实现
+- `cacheService.js` (14.2KB) - 文件缓存系统
+- `offerStrategy.js` (13.0KB) - 自动竞价策略引擎
 
-## 代码定位指南
+**特点**：
+- 高度模块化，单一职责原则
+- 广泛的错误处理和重试机制
+- WebSocket 和 HTTP 双重通信支持
 
-### 查找功能实现
+### `/src/utils/` - 基础设施层
 
-| 功能 | 位置 |
-|------|------|
-| 创建集合出价 | `src/services/offerService.js` |
-| 自动竞价逻辑 | `src/services/offerStrategy.js` |
-| OpenSea API 调用 | `src/services/openseaApi.js` |
-| 市场扫描 | `src/services/scanService.js` |
-| 密钥管理 | `src/utils/keyManager.js` |
-| 链配置 | `src/config.js` |
-| 代币配置 | `src/config/tokens.js` |
+**职责**：通用工具，系统服务，安全功能，配置管理
 
-### 查找 CLI 命令
+**关键文件**：
+- `keyManager.js` - AES-256-GCM 私钥加密存储
+- `commandUtils.js` - 链配置和钱包管理工具
+- `configManager.js` - 持久化配置管理
+- `logger.js` - 分级日志系统
+- `proxySetup.js` - HTTP 代理配置
 
-| 命令 | 文件 |
-|------|------|
-| `offer` | `src/commands/offerCommand.js` |
-| `auto` | `src/commands/autoOfferCommand.js` |
-| `check` | `src/commands/checkOffersCommand.js` |
-| `scan` | `src/commands/scanCommand.js` |
-| `key` | `src/commands/keyCommand.js` |
-| `swap` | `src/commands/swapCommand.js` |
-| `send` | `src/commands/sendCommand.js` |
-| `list` | `src/commands/listCommand.js` |
-| `trending` | `src/commands/trendingCommand.js` |
+**安全重点**：
+- 私钥加密和安全存储
+- 环境变量验证和保护
+- 网络代理和安全传输
 
-## 依赖关系
+### `/src/__tests__/` - 测试套件
+
+**测试覆盖率**：84.36%（服务层），整体高质量
+
+**测试类型**：
+- **单元测试**：模拟依赖，测试单个功能
+- **集成测试**：真实 API 调用，测试完整流程
+- **命令测试**：CLI 命令的端到端测试
+
+**测试配置**：
+- Jest 框架，实验性 ES 模块支持
+- 控制台输出抑制，清洁测试环境
+- 自动化覆盖率报告
+
+## 文件大小分析
+
+### 最大文件（复杂度指标）
+
+1. `listCommand.js` - 51.7KB（交互式挂单系统）
+2. `openseaApi.js` - 33.1KB（API 完整封装）
+3. `notificationService.js` - 23.9KB（通知系统）
+4. `pollingMonitorService.js` - 25.9KB（轮询监控）
+5. `cacheCommand.js` - 17.0KB（缓存管理）
+
+### 服务层分布
+
+- **API 集成**：33.1KB（最大复杂度）
+- **监控服务**：38.8KB（轮询 + 流式）
+- **缓存和通知**：38.1KB（数据管理）
+- **交易服务**：18.1KB（核心业务）
+
+### 命令层分布
+
+- **复杂命令**：68.6KB（list + cache + monitor）
+- **核心命令**：19.7KB（offer + auto + buy）
+- **工具命令**：16.2KB（key + balance + chain）
+- **交易命令**：7.9KB（send + swap + check）
+
+## 数据流架构
+
+### 典型执行流程
 
 ```
-Commands（命令层）
-    ↓ 调用
-Services（服务层）
-    ↓ 调用
-Utils（工具层）+ External APIs（外部 API）
+用户输入 → CLI 解析 → 命令路由 → 服务调用 → API/区块链
+                ↓
+缓存检查 ← 数据处理 ← 响应解析 ← 结果返回
+                ↓
+用户输出 ← 格式化 ← 通知触发 ← 状态更新
 ```
 
-**原则**：
-- 命令不直接调用外部 API，通过服务层
-- 服务可以调用其他服务
-- 工具层不依赖命令或服务
-- 配置文件可被任何层引用
+### 实时监控流程
+
+```
+WebSocket 连接 → 事件接收 → 数据解析 → 通知触发
+       ↓
+事件存储 ← 缓存更新 ← 状态检查 ← 用户界面
+```
+
+## 扩展点设计
+
+### 新命令添加
+
+1. 在 `src/commands/` 创建新命令文件
+2. 在 `src/commands/index.js` 导出命令
+3. 在 `src/cli.js` 注册命令
+4. 添加对应的测试文件
+
+### 新服务集成
+
+1. 在 `src/services/` 创建服务类
+2. 实现标准接口方法
+3. 在命令层注入和使用
+4. 添加完整的测试覆盖
+
+### 新链支持
+
+1. 在 `src/constants/chains.js` 添加链配置
+2. 在 `src/config/tokens.js` 添加代币地址
+3. 更新相关服务的链处理逻辑
+4. 添加链特定的测试用例
+
+## 构建和部署结构
+
+### 开发环境
+
+```bash
+npm install          # 安装依赖
+npm run test         # 运行测试
+npm run lint         # 代码检查
+npm run dev          # 开发模式（如果适用）
+```
+
+### 生产构建
+
+```bash
+npm run build        # 构建命令（如有）
+npm pack            # 打包 NPM 包
+npm publish         # 发布到 NPM
+```
+
+### 测试执行
+
+```bash
+npm test             # 单元测试
+npm run integration  # 集成测试
+npm run test:coverage # 覆盖率报告
+```
+
+这个源码结构反映了项目从简单 CLI 工具演进为成熟 NFT 交易平台的过程，具有良好的分层架构、高测试覆盖率和清晰的扩展点设计。

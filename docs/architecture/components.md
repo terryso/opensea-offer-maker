@@ -1,218 +1,399 @@
-# 组件架构
+# 组件架构详解
 
-## OfferService
+## 核心服务组件
 
-**职责**：使用验证和错误处理封装 OpenSea SDK 出价创建
+### OfferService - 出价服务
+
+**职责**：封装 OpenSea SDK，提供出价创建的核心业务逻辑
+
+**文件位置**：`src/services/offerService.js` (5.1KB)
 
 **关键接口**：
 - `createCollectionOffer(params)` - 创建集合级出价
 - `createIndividualOffer(params)` - 创建单个 NFT 出价
-- `validateBalance(balance, amount)` - 检查 WETH 余额
+- `validateBalance(balance, amount)` - 验证 WETH 余额
 - `getWETHBalance(contract, address)` - 查询 WETH 余额
+- `validateCollectionOffer(collectionSlug)` - 验证集合出价参数
+- `validateIndividualOffer(tokenAddress, tokenId)` - 验证单品出价参数
 
 **依赖项**：
-- OpenSea SDK (opensea-js) 用于创建出价
-- ethers.js 用于 WETH 合约交互
-- Logger 用于输出
+- OpenSea SDK (opensea-js v8.0.3) - 核心出价功能
+- ethers.js v6.15.0 - WETH 合约交互
+- Logger - 统一日志输出
 
-**技术栈**：JavaScript ES Modules、ethers.js v6、opensea-js v7
-
-**⚠️ 已知问题**：使用 `console.log` 而不是 logger（与其他服务不一致）
-
-**来源**：`src/services/offerService.js`
+**设计特点**：
+- 完整的参数验证和错误处理
+- 支持特征出价（trait-based offers）
+- 自动计算过期时间戳
+- 余额检查前置验证
 
 ---
 
-## OfferStrategy
+### OfferStrategy - 策略引擎
 
-**职责**：实现市场监控和动态定价的自动竞价策略
+**职责**：实现自动竞价策略，市场监控和动态定价
+
+**文件位置**：`src/services/offerStrategy.js` (13.0KB)
 
 **关键接口**：
-- `start(params)` - 开始自动竞价循环
+- `start(params)` - 启动自动竞价循环
 - `stop()` - 停止自动竞价
-- `checkAndCreateOffer(params)` - 主循环迭代（检查市场，根据需要创建出价）
-- `calculateNewOfferPrice(currentBest, collectionSlug)` - 价格计算，包含地板价限制
+- `checkAndCreateOffer(params)` - 核心策略逻辑
+- `calculateNewOfferPrice(currentBest, collectionSlug)` - 价格计算算法
+- `validatePriceRange(price)` - 价格范围验证
+- `validateFloorPriceLimit(price, collectionSlug)` - 地板价限制验证
+- `checkLastOffer()` - 检查上次出价状态
 
-**依赖项**：
-- OfferService 用于创建出价
-- OpenSeaApi 用于市场数据
-- Timer (setInterval) 用于周期性执行
+**策略算法**：
+1. 定期获取当前最高出价
+2. 如果不是自己的出价，计算新价格 = 当前最高 + 增量
+3. 验证新价格在用户设定范围内
+4. 验证不超过地板价百分比限制
+5. 创建新出价并记录状态
 
-**技术栈**：JavaScript ES Modules、setInterval 用于调度
-
-**⚠️ 复杂度警告**：
-- 代码库中最复杂的模块
-- 出价被接受时使用 `process.exit(0)`
-- 错误处理返回 null 并继续（不重试失败的出价）
-- 一次只能监控一个集合/代币
-
-**来源**：`src/services/offerStrategy.js`
+**复杂度警告**：
+- 代码库中最复杂的业务逻辑模块
+- 涉及市场时机判断和价格策略
+- 需要处理竞态条件和异常情况
 
 ---
 
-## OpenSeaApi
+### OpenSeaApi - API 集成层
 
-**职责**：使用重试逻辑和错误处理封装 OpenSea API v2 调用
+**职责**：OpenSea API v2 完整封装，包含重试、代理支持和错误处理
+
+**文件位置**：`src/services/openseaApi.js` (33.1KB - 最大服务文件)
 
 **关键接口**：
 - `fetchWithRetry(url, options, retries, delay)` - 带重试的 HTTP 客户端
-- `getCollectionOffers(slug)` - 获取集合出价
-- `getCollectionStats(slug)` - 获取包括地板价的统计数据
-- `getCollectionInfo(slug)` - 获取集合元数据
-- `getOrderStatus(orderHash)` - 检查出价是否被接受
+- `getCollectionOffers(slug)` - 获取集合出价列表
+- `getCollectionStats(slug)` - 获取集合统计数据（地板价、交易量等）
+- `getNFTOffers(contractAddress, tokenId)` - 获取单个 NFT 出价
+- `getBestNFTOffer(collectionSlug, tokenId)` - 获取最佳 NFT 出价
+- `getCollectionInfo(collectionSlug)` - 获取集合基本信息
+- `getBestListings(collectionSlug, limit)` - 获取最佳挂单
+- `getOrderStatus(orderHash)` - 查询订单状态
 
-**依赖项**：
-- 原生 fetch API
-- Logger
+**技术特性**：
+- 3次重试机制，指数退避策略
+- HTTP 代理支持（国际用户）
+- 60秒超时配置
+- 完整的错误分类处理
+- 429 状态码智能处理
 
-**技术栈**：JavaScript ES Modules、原生 fetch
-
-**实现细节**：
-- 3 次重试，1 秒延迟（硬编码）
-- 404 返回空数组而不是错误
-- 401 立即抛出异常（无重试）
-
-**⚠️ 代码重复**：ReservoirApi 中有类似的重试逻辑
-
-**来源**：`src/services/openseaApi.js`
-
----
-
-## ReservoirApi
-
-**职责**：为跨市场数据和挂单封装 Reservoir API 调用
-
-**关键接口**：
-- `getTopCollections(limit, options)` - 按交易量获取集合
-- `getTrendingCollections(options)` - 获取热门集合
-- `getCollectionOffers(collectionId)` - 获取出价（Reservoir 格式）
-
-**依赖项**：
-- 原生 fetch API
-- Logger
-- 链配置（根据链选择 API 端点）
-
-**技术栈**：JavaScript ES Modules、原生 fetch
-
-**链特定 URL**：
-- 以太坊：`https://api.reservoir.tools`
-- Base：`https://api-base.reservoir.tools`
-- Sepolia：`https://api-sepolia.reservoir.tools`
-
-**⚠️ 代码重复**：与 OpenSeaApi 有相同的 `fetchWithRetry` 逻辑
-
-**来源**：`src/services/reservoirApi.js`
+**代理配置**：
+- 支持 HTTPS 代理
+- 自动检测 `HTTP_PROXY` 环境变量
+- 代理连接失败时的优雅降级
 
 ---
 
-## ScanService
+### StreamService - 实时流处理
 
-**职责**：通过组合多个数据源分析市场交易机会
+**职责**：OpenSea Stream API 集成，实时事件监控和处理
+
+**文件位置**：`src/services/streamService.js` (12.6KB)
 
 **关键接口**：
-- `scanTopCollections(options)` - 按交易量扫描并过滤
-- `scanTrendingCollections(options)` - 扫描热门集合
-- `_processCollections(collections, filters)` - 应用过滤器并计算指标
+- `startMonitoring(params)` - 开始实时监控
+- `stopMonitoring()` - 停止监控
+- `handleEvent(event)` - 事件处理核心逻辑
+- `saveEvent(event)` - 事件持久化存储
+- `reconnectWebSocket()` - WebSocket 重连机制
 
-**依赖项**：
-- ReservoirApi 用于集合数据
-- OpenSeaApi（目前使用较少，主要是 Reservoir）
+**支持的事件类型**：
+- `sale` - 销售事件
+- `transfer` - 转账事件
+- `listing` - 挂单事件
+- `bid` - 出价事件
+- `cancel` - 取消事件
 
-**技术栈**：JavaScript ES Modules
+**技术特性**：
+- WebSocket 持久连接
+- 自动重连机制（指数退避）
+- 事件去重和过滤
+- JSONL 格式事件存储
+- 连接状态监控
 
-**过滤逻辑**：
-- 交易量阈值检查
-- 销售估算计算
-- 价格差距百分比 ((地板价 - 最高出价) / 地板价 * 100)
-
-**⚠️ 硬编码**：分页页面之间延迟 500ms
-
-**来源**：`src/services/scanService.js`
+**存储机制**：
+- 文件路径：`.cache/events/{wallet}_{chain}.jsonl`
+- 按时间和钱包分组存储
+- 自动清理过期事件
 
 ---
 
-## KeyManager
+### CacheService - 缓存系统
 
-**职责**：安全地加密、存储和管理多个私钥
+**职责**：文件系统缓存管理，NFT 元数据和查询结果缓存
+
+**文件位置**：`src/services/cacheService.js` (14.2KB)
 
 **关键接口**：
-- `static encryptKey(privateKey, name)` - 加密并保存密钥
-- `static decryptKey(name?)` - 解密密钥（省略 name 则使用活跃密钥）
-- `static listKeys()` - 列出所有存储的密钥
-- `static setActiveKey(name)` - 切换活跃密钥
-- `static removeKey(name)` - 删除密钥
+- `getNFTMetadata(contractAddress, tokenId)` - 获取 NFT 元数据
+- `setNFTMetadata(contractAddress, tokenId, metadata)` - 缓存 NFT 元数据
+- `getCachedCollectionStats(slug)` - 获取缓存的集合统计
+- `setCachedCollectionStats(slug, stats, ttl)` - 缓存集合统计
+- `clearCache()` - 清理所有缓存
+- `getCacheSize()` - 获取缓存大小
 
-**依赖项**：
-- Node.js crypto 模块（AES-256-GCM）
-- ethers.js（验证私钥格式）
-- 文件系统（读写 .keys 文件）
+**缓存策略**：
+- TTL（生存时间）支持
+- LRU（最近最少使用）清理
+- 按数据类型分层存储
+- 缓存命中率统计
 
-**技术栈**：JavaScript ES Modules、Node.js crypto
-
-**安全模型**：
-- 算法：AES-256-GCM（认证加密）
-- 密钥派生：scrypt(password, salt, 32)
-- 存储：JSON 文件，每个密钥有独立的 IV 和认证标签
-
-**⚠️ 严重安全问题**：
-```javascript
-// src/utils/keyManager.js:10-12
-export const SALT = Buffer.from('opensea-offer-maker-salt', 'utf8');
-export const PASSWORD = 'opensea-offer-maker-password';
+**存储结构**：
 ```
-源代码中的硬编码盐和密码意味着任何有源代码的人都可以解密密钥。
-
-**缓解措施**：用户可以设置 `ENCRYPTION_KEY` 环境变量自定义密钥。
-
-**建议**：仅用于低价值钱包，不要存储主要资产。
-
-**来源**：`src/utils/keyManager.js`
+.cache/
+├── nfts/
+│   └── {contractAddress}_{tokenId}.json
+├── collections/
+│   └── {collectionSlug}.json
+└── metadata/
+    └── cache_stats.json
+```
 
 ---
+
+### NotificationService - 通知系统
+
+**职责**：事件通知处理，用户界面反馈和状态更新
+
+**文件位置**：`src/services/notificationService.js` (23.9KB)
+
+**关键接口**：
+- `sendNotification(type, data)` - 发送通知
+- `formatEventMessage(event)` - 格式化事件消息
+- `handleRealTimeEvent(event)` - 实时事件处理
+- `updateMonitorStatus(status)` - 更新监控状态
+- `generateSummaryReport()` - 生成汇总报告
+
+**通知类型**：
+- 实时事件通知
+- 交易状态更新
+- 错误和警告消息
+- 监控状态变更
+- 系统健康检查
+
+**格式化功能**：
+- 多语言支持（中英文）
+- 彩色控制台输出
+- 详细/简洁模式切换
+- 自定义消息模板
+
+---
+
+### PollingMonitorService - 轮询监控
+
+**职责**：基于轮询的市场监控，WebSocket 的备用监控方案
+
+**文件位置**：`src/services/pollingMonitorService.js` (25.9KB)
+
+**关键接口**：
+- `startPolling(params)` - 开始轮询监控
+- `stopPolling()` - 停止轮询
+- `pollCollectionStats(slug)` - 轮询集合统计
+- `pollWalletActivity(address)` - 轮询钱包活动
+- `checkForChanges(currentData, previousData)` - 变化检测
+
+**轮询策略**：
+- 可配置轮询间隔（默认 60 秒）
+- 智能间隔调整（基于市场活跃度）
+- 数据变化检测和通知
+- API 调用频率限制
+
+**适用场景**：
+- WebSocket 连接不稳定
+- 需要历史数据对比
+- 特定时间段的监控
+- 低频数据更新需求
+
+---
+
+### BuyService - 购买服务
+
+**职责**：NFT 购买功能，支持即时购买和策略购买
+
+**文件位置**：`src/services/buyService.js` (10.7KB)
+
+**关键接口**：
+- `buyNow(params)` - 即时购买
+- `createBuyOrder(params)` - 创建购买订单
+- `validatePurchase(params)` - 购买参数验证
+- `estimateGasCost(transaction)` - Gas 费用估算
+- `executePurchase(signedTransaction)` - 执行购买交易
+
+**购买策略**：
+- 市价即时购买
+- 限价订单购买
+- Gas 费用优化
+- 滑点保护
+
+**安全特性**：
+- 交易前验证
+- 费用估算和确认
+- 购买限额检查
+- 交易状态跟踪
+
+## 工具组件
+
+### KeyManager - 密钥管理器
+
+**职责**：私钥的安全存储、加密管理和访问控制
+
+**文件位置**：`src/utils/keyManager.js`
+
+**加密方案**：
+- 算法：AES-256-GCM
+- 密钥派生：scrypt + 硬编码盐值
+- 存储格式：JSON（加密数据 + IV + AuthTag）
+
+**关键接口**：
+- `encryptKey(privateKey, name)` - 加密并存储私钥
+- `decryptKey(name)` - 解密指定私钥
+- `listKeys()` - 列出所有存储的密钥
+- `setActiveKey(name)` - 设置活跃密钥
+- `removeKey(name)` - 删除密钥
+- `validatePrivateKey(privateKey)` - 验证私钥格式
+
+**安全特性**：
+- 内存中明文最小化
+- 自动清理敏感数据
+- 地址验证和格式检查
+- 多密钥管理支持
+
+---
+
+### CommandUtils - 命令工具集
+
+**职责**：CLI 命令的通用工具，链配置和钱包管理
+
+**文件位置**：`src/utils/commandUtils.js`
+
+**关键接口**：
+- `getWallet(options)` - 获取钱包实例
+- `getEffectiveChain(options)` - 获取有效链配置
+- `validateChain(chainName)` - 验证链配置
+- `addChainOption(command)` - 添加链选项到命令
+- `addPrivateKeyOption(command)` - 添加私钥选项
+
+**钱包管理**：
+- 多种私钥来源支持（文件、环境变量、命令行参数）
+- 自动链配置检测
+- Provider 智能选择（Alchemy 优先）
+- 临时私钥支持
+
+**链配置**：
+- 6 条链的统一接口
+- 动态链切换
+- 默认链持久化
+- 链特定的 RPC 配置
+
+---
+
+### Logger - 日志系统
+
+**职责**：分级日志记录，调试信息输出和错误跟踪
+
+**文件位置**：`src/utils/logger.js`
+
+**日志级别**：
+- `ERROR` (0) - 错误信息
+- `WARN` (1) - 警告信息
+- `INFO` (2) - 一般信息
+- `DEBUG` (3) - 调试信息
+
+**关键接口**：
+- `error(...args)` - 记录错误
+- `warn(...args)` - 记录警告
+- `info(...args)` - 记录信息
+- `debug(...args)` - 记录调试信息
+- `setLevel(level)` - 设置日志级别
+- `debugObject(label, obj)` - 对象调试输出
+
+**配置特性**：
+- 环境变量控制（`LOG_LEVEL`）
+- 测试环境自动降级
+- 彩色输出支持
+- 格式化选项
+
+---
+
+### ConfigManager - 配置管理
+
+**职责**：用户配置的持久化存储和管理
+
+**文件位置**：`src/utils/configManager.js`
+
+**配置类型**：
+- 默认链设置
+- 用户偏好设置
+- 监控配置
+- 缓存策略配置
+
+**关键接口**：
+- `setDefaultChain(chain)` - 设置默认链
+- `getDefaultChain()` - 获取默认链
+- `setUserPreference(key, value)` - 设置用户偏好
+- `getUserPreference(key)` - 获取用户偏好
+- `clearAllConfig()` - 清理所有配置
+
+**存储特性**：
+- JSON 格式存储
+- 原子性写入操作
+- 配置验证和默认值
+- 跨平台兼容性
 
 ## 组件交互图
 
-### 自动竞价流程
-
 ```mermaid
-sequenceDiagram
-    participant User as 用户
-    participant CLI
-    participant AutoCmd as AutoCmd
-    participant Strategy as OfferStrategy
-    participant OfferSvc as OfferService
-    participant OpenSeaAPI
-    participant Blockchain as 区块链
+graph TB
+    Commands[CLI 命令层] --> OfferService
+    Commands --> BuyService
+    Commands --> CacheService
 
-    User->>CLI: auto collection -c pudgy --min 0.1 --max 0.2
-    CLI->>AutoCmd: 执行命令
-    AutoCmd->>Strategy: 创建 OfferStrategy 实例
-    AutoCmd->>Strategy: start(params)
+    OfferService --> OpenSeaApi
+    OfferStrategy --> OfferService
+    OfferStrategy --> OpenSeaApi
 
-    loop 每 N 秒
-        Strategy->>OpenSeaAPI: getCollectionOffers(slug)
-        OpenSeaAPI-->>Strategy: 当前最高出价
+    StreamService --> NotificationService
+    PollingMonitorService --> NotificationService
+    StreamService --> CacheService
+    PollingMonitorService --> OpenSeaApi
 
-        alt 最高出价不是我们的
-            Strategy->>Strategy: calculateNewOfferPrice()
-            Strategy->>Strategy: validatePriceRange()
-            Strategy->>Strategy: validateFloorPriceLimit()
+    OpenSeaApi --> Logger
+    CacheService --> Logger
+    NotificationService --> Logger
 
-            alt 验证通过
-                Strategy->>OfferSvc: createCollectionOffer()
-                OfferSvc->>Blockchain: 签名并提交交易
-                Blockchain-->>OfferSvc: 订单哈希
-                OfferSvc-->>Strategy: 成功
-                Strategy->>Strategy: 存储订单哈希
-            end
-        end
+    Commands --> CommandUtils
+    CommandUtils --> KeyManager
+    CommandUtils --> ConfigManager
 
-        Strategy->>OpenSeaAPI: getOrderStatus(lastOrderHash)
-        OpenSeaAPI-->>Strategy: 订单状态
+    CommandUtils --> Logger
 
-        alt 订单被接受
-            Strategy->>User: 日志："出价被接受！"
-            Strategy->>Strategy: process.exit(0) ⚠️
-        end
-    end
+    style OfferStrategy fill:#ff9
+    style KeyManager fill:#f99
+    style StreamService fill:#9cf
 ```
+
+## 组件设计原则
+
+### 单一职责原则
+每个组件专注于单一功能领域，职责明确，便于维护和测试。
+
+### 依赖注入
+通过构造函数或方法参数注入依赖，提高可测试性和灵活性。
+
+### 错误处理
+统一的错误处理策略，包括重试机制、优雅降级和用户友好的错误消息。
+
+### 配置驱动
+组件行为通过配置控制，支持不同环境和使用场景。
+
+### 事件驱动
+实时监控和通知系统采用事件驱动架构，松耦合设计。
+
+### 安全优先
+涉及私钥和交易的组件采用最高安全标准，包括加密存储和输入验证。
+
+这些组件构成了一个完整、可靠的 NFT 交易系统，具有良好的扩展性和维护性。
