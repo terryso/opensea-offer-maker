@@ -111,34 +111,36 @@ export class NotificationService {
         const nftId = this._extractTokenId(payload?.item?.nft_id);
         const collectionName = payload?.collection?.name || payload?.collection?.slug || 'Unknown Collection';
         const priceWei = payload?.sale_price || '0';
-        const priceEth = formatUnits(priceWei, 18);
+        const currency = payload?.currency || 'ETH';
+        const price = formatUnits(priceWei, 18);
+        const chain = event.chain || 'ethereum';
         const seller = payload?.from_account?.address || 'Unknown';
         const buyer = payload?.to_account?.address || 'Unknown';
 
         if (this.verbosity === NotificationService.VerbosityLevels.MINIMAL) {
-            return `[SALE] ${nftName} #${nftId} sold for ${priceEth} ETH`;
+            return `[SALE] ${nftName} #${nftId} sold for ${price} ${currency} (${this._formatChain(chain)})`;
         }
 
         if (this.verbosity === NotificationService.VerbosityLevels.DETAILED) {
             const timestamp = event.event_timestamp || new Date().toISOString();
             const contract = this._extractContract(payload?.item?.nft_id);
             return `${'═'.repeat(50)}
-[SALE] ${event.event_type}
+[SALE] ${event.event_type} on ${this._formatChain(chain)}
 Time: ${timestamp}
 Collection: ${payload?.collection?.slug || 'N/A'} (${collectionName})
 NFT: ${nftName} #${nftId}
 Contract: ${contract || 'N/A'}
 Token ID: ${nftId}
-Price: ${priceEth} ETH (${priceWei} wei)
+Price: ${price} ${currency} (${priceWei} wei)
 Seller: ${seller}
 Buyer: ${buyer}
 ${'═'.repeat(50)}`;
         }
 
         // Normal verbosity (default)
-        return `[SALE] Collection: ${collectionName}
+        return `[SALE] Collection: ${collectionName} (${this._formatChain(chain)})
 NFT: ${nftName} #${nftId}
-Price: ${priceEth} ETH
+Price: ${price} ${currency}
 From: ${this._truncateAddress(seller)} → To: ${this._truncateAddress(buyer)}`;
     }
 
@@ -191,32 +193,34 @@ From: ${this._truncateAddress(fromAddress)} → To: ${this._truncateAddress(toAd
         const nftId = this._extractTokenId(payload?.item?.nft_id);
         const collectionName = payload?.collection?.name || payload?.collection?.slug || 'Unknown Collection';
         const priceWei = payload?.base_price || payload?.listing_price || '0';
-        const priceEth = formatUnits(priceWei, 18);
+        const currency = payload?.currency || 'ETH';
+        const price = formatUnits(priceWei, 18);
+        const chain = event.chain || 'ethereum';
         const maker = payload?.maker?.address || payload?.from_account?.address || 'Unknown';
 
         if (this.verbosity === NotificationService.VerbosityLevels.MINIMAL) {
-            return `[LISTING] ${nftName} #${nftId} listed for ${priceEth} ETH`;
+            return `[LISTING] ${nftName} #${nftId} listed for ${price} ${currency} (${this._formatChain(chain)})`;
         }
 
         if (this.verbosity === NotificationService.VerbosityLevels.DETAILED) {
             const timestamp = event.event_timestamp || new Date().toISOString();
             const contract = this._extractContract(payload?.item?.nft_id);
             return `${'═'.repeat(50)}
-[LISTING] ${event.event_type}
+[LISTING] ${event.event_type} on ${this._formatChain(chain)}
 Time: ${timestamp}
 Collection: ${payload?.collection?.slug || 'N/A'} (${collectionName})
 NFT: ${nftName} #${nftId}
 Contract: ${contract || 'N/A'}
 Token ID: ${nftId}
-Listing Price: ${priceEth} ETH (${priceWei} wei)
+Listing Price: ${price} ${currency} (${priceWei} wei)
 Seller: ${maker}
 ${'═'.repeat(50)}`;
         }
 
         // Normal verbosity (default)
-        return `[LISTING] Collection: ${collectionName}
+        return `[LISTING] Collection: ${collectionName} (${this._formatChain(chain)})
 NFT: ${nftName} #${nftId}
-Price: ${priceEth} ETH
+Price: ${price} ${currency}
 Seller: ${this._truncateAddress(maker)}`;
     }
 
@@ -227,37 +231,48 @@ Seller: ${this._truncateAddress(maker)}`;
      */
     formatBidEvent(event) {
         const { payload } = event;
-        const nftName = payload?.item?.metadata?.name || 'Unknown NFT';
-        const nftId = this._extractTokenId(payload?.item?.nft_id);
+        const isCollectionOffer = payload?.is_collection_offer;
         const collectionName = payload?.collection?.name || payload?.collection?.slug || 'Unknown Collection';
         const priceWei = payload?.base_price || payload?.bid_amount || '0';
-        const priceEth = formatUnits(priceWei, 18);
+        const currency = payload?.currency || 'ETH';
+        const price = formatUnits(priceWei, 18);
+        const chain = event.chain || 'ethereum';
         const bidder = payload?.maker?.address || payload?.from_account?.address || 'Unknown';
 
         if (this.verbosity === NotificationService.VerbosityLevels.MINIMAL) {
-            return `[BID] ${nftName} #${nftId} received bid of ${priceEth} ETH`;
+            const target = isCollectionOffer ? `${collectionName} collection` : `${payload?.item?.metadata?.name || 'NFT'} #${this._extractTokenId(payload?.item?.nft_id)}`;
+            return `[BID] ${target} received bid of ${price} ${currency} (${this._formatChain(chain)})`;
         }
 
         if (this.verbosity === NotificationService.VerbosityLevels.DETAILED) {
             const timestamp = event.event_timestamp || new Date().toISOString();
             const contract = this._extractContract(payload?.item?.nft_id);
             return `${'═'.repeat(50)}
-[BID] ${event.event_type}
+[BID] ${event.event_type} on ${this._formatChain(chain)}
 Time: ${timestamp}
 Collection: ${payload?.collection?.slug || 'N/A'} (${collectionName})
-NFT: ${nftName} #${nftId}
-Contract: ${contract || 'N/A'}
-Token ID: ${nftId}
-Bid Amount: ${priceEth} ETH (${priceWei} wei)
+${isCollectionOffer ? 'Collection-level offer' : `NFT: ${payload?.item?.metadata?.name || 'Unknown NFT'} #${this._extractTokenId(payload?.item?.nft_id)}`}
+${isCollectionOffer ? '' : `Contract: ${contract || 'N/A'}
+Token ID: ${this._extractTokenId(payload?.item?.nft_id)}`}
+Bid Amount: ${price} ${currency} (${priceWei} wei)
 Bidder: ${bidder}
 ${'═'.repeat(50)}`;
         }
 
         // Normal verbosity (default)
-        return `[BID] Collection: ${collectionName}
-NFT: ${nftName} #${nftId}
-Bid: ${priceEth} ETH
+        if (isCollectionOffer) {
+            return `[BID] Collection: ${collectionName} (${this._formatChain(chain)})
+Type: Collection-level offer
+Bid: ${price} ${currency}
 Bidder: ${this._truncateAddress(bidder)}`;
+        } else {
+            const nftName = payload?.item?.metadata?.name || 'Unknown NFT';
+            const nftId = this._extractTokenId(payload?.item?.nft_id);
+            return `[BID] Collection: ${collectionName} (${this._formatChain(chain)})
+NFT: ${nftName} #${nftId}
+Bid: ${price} ${currency}
+Bidder: ${this._truncateAddress(bidder)}`;
+        }
     }
 
     /**
@@ -605,6 +620,29 @@ Cancelled By: ${this._truncateAddress(maker)}`;
     _truncateAddress(address) {
         if (!address || address.length < 10) return address;
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    }
+
+    /**
+     * Format chain name for display
+     * @private
+     * @param {string} chain - Chain identifier
+     * @returns {string} Formatted chain name
+     */
+    _formatChain(chain) {
+        const chainMap = {
+            'ethereum': 'Ethereum',
+            'base': 'Base',
+            'polygon': 'Polygon',
+            'arbitrum': 'Arbitrum',
+            'optimism': 'Optimism',
+            'apechain': 'ApeChain',
+            'ape_chain': 'ApeChain',  // Support both formats
+            'avalanche': 'Avalanche',
+            'bsc': 'BSC',
+            'solana': 'Solana'
+        };
+
+        return chainMap[chain?.toLowerCase()] || chain || 'Unknown';
     }
 }
 

@@ -2,6 +2,7 @@ import { logger } from '../utils/logger.js';
 import { OPENSEA_API_KEY } from '../utils/env.js';
 import { OPENSEA_API_BASE_URL } from '../config.js';
 import { OpenSeaApi } from './openseaApi.js';
+import { getNativeCurrencySymbol } from '../constants/chains.js';
 
 /**
  * PollingMonitorService - Monitors NFT events using REST API polling
@@ -385,24 +386,29 @@ export class PollingMonitorService {
 
             const events = response.asset_events;
 
-            if (events.length > 0) {
-                logger.info(`📬 Received ${events.length} new event(s) from API`);
-            } else {
+            if (events.length === 0) {
                 logger.debug(`No new events (checked up to ${new Date(this.lastEventTimestamp * 1000).toISOString()})`);
+                return;
             }
 
-            // Process each event
+            // Process each event silently - only show relevant events
             let processedCount = 0;
+            let relevantCount = 0;
             for (const event of events) {
                 const wasProcessed = await this._processEvent(event, walletAddress);
-                if (wasProcessed) processedCount++;
+                if (wasProcessed) {
+                    processedCount++;
+                    relevantCount++;
+                } else {
+                    // Count if event was relevant to wallet but filtered out by other criteria
+                    const isRelevantToWallet = this._isEventRelevantToWallet(event, walletAddress);
+                    if (isRelevantToWallet) relevantCount++;
+                }
             }
 
-            if (processedCount > 0) {
-                logger.info(`✅ Processed ${processedCount} new event(s)`);
-            } else if (events.length > 0) {
-                logger.info(`⚠️  Received ${events.length} event(s) but none matched your wallet/filters`);
-                logger.info(`   (Events may not involve wallet ${walletAddress})`);
+            // Only show summary if there were relevant events
+            if (relevantCount > 0) {
+                logger.debug(`Found ${relevantCount} relevant event(s), ${processedCount} processed`);
             }
 
             // Update last event timestamp
@@ -438,25 +444,12 @@ export class PollingMonitorService {
                 return false;
             }
 
-            // Debug: Log raw event for troubleshooting (first 3 events only to avoid spam)
-            this._eventDebugCount = (this._eventDebugCount || 0) + 1;
-            if (this._eventDebugCount <= 3) {
-                logger.info('\n📋 Raw event from OpenSea API:');
-                logger.info(JSON.stringify(event, null, 2));
-            }
-
             // Transform REST API event to Stream API format
             const transformedEvent = this._transformEventToStreamFormat(event);
 
             if (!transformedEvent) {
-                logger.info('⚠️  Event could not be transformed, skipping');
-                logger.info(`   Event type: ${event.event_type}`);
+                logger.debug(`Event type '${event.event_type}' could not be transformed`);
                 return false;
-            }
-
-            if (this._eventDebugCount <= 3) {
-                logger.info('\n🔄 Transformed event:');
-                logger.info(JSON.stringify(transformedEvent, null, 2));
             }
 
             // Mark as seen
@@ -474,7 +467,7 @@ export class PollingMonitorService {
             for (const sub of this.subscriptions.values()) {
                 // Check if event type matches subscription
                 if (!sub.eventTypes.includes(transformedEvent.event_type)) {
-                    logger.info(`   ℹ️  Event type '${transformedEvent.event_type}' not in your subscriptions`);
+                    logger.debug(`Event type '${transformedEvent.event_type}' not in subscription`);
                     continue;
                 }
 
@@ -482,7 +475,7 @@ export class PollingMonitorService {
                 if (sub.collectionSlug !== '*') {
                     const eventCollection = transformedEvent.payload?.collection?.slug;
                     if (eventCollection !== sub.collectionSlug) {
-                        logger.info(`   ℹ️  Collection '${eventCollection}' doesn't match filter: ${sub.collectionSlug}`);
+                        logger.debug(`Collection '${eventCollection}' doesn't match filter: ${sub.collectionSlug}`);
                         continue;
                     }
                 }
@@ -501,18 +494,15 @@ export class PollingMonitorService {
                         makerAddress === normalizedWallet;
 
                     if (!isInvolved) {
-                        logger.info(`   ℹ️  Event doesn't involve your wallet`);
-                        logger.info(`   Your wallet: ${normalizedWallet}`);
-                        logger.info(`   From: ${fromAddress || 'N/A'}`);
-                        logger.info(`   To: ${toAddress || 'N/A'}`);
-                        logger.info(`   Maker: ${makerAddress || 'N/A'}`);
+                        logger.debug(`Event doesn't involve wallet ${normalizedWallet}`);
                         continue;
                     }
                 }
 
                 // Call the callback
-                logger.info(`\n🔔 New ${transformedEvent.event_type} event detected!`);
                 try {
+                    // Add event detection header
+                    logger.info(`\n🔔 New ${transformedEvent.event_type} event detected!`);
                     await sub.callback(transformedEvent);
                     matched = true;
                 } catch (callbackError) {
@@ -533,6 +523,29 @@ export class PollingMonitorService {
     }
 
     /**
+     * Check if an event is relevant to a specific wallet address
+     * @private
+     * @param {Object} event - Raw event from OpenSea REST API
+     * @param {string} walletAddress - Wallet address to check
+     * @returns {boolean} True if event involves the wallet
+     */
+    _isEventRelevantToWallet(event, walletAddress) {
+        const normalizedWallet = walletAddress.toLowerCase();
+
+        // Check various address fields in the raw event
+        const addresses = [
+            event.maker,
+            event.from_address,
+            event.to_address,
+            event.seller,
+            event.buyer,
+            event.taker
+        ].filter(addr => addr); // Filter out null/undefined
+
+        return addresses.some(addr => addr.toLowerCase() === normalizedWallet);
+    }
+
+    /**
      * Transform REST API event to Stream API format
      * @private
      * @param {Object} event - Event from OpenSea REST API
@@ -548,31 +561,87 @@ export class PollingMonitorService {
                 return null;
             }
 
-            // Extract NFT info
-            const nftId = event.nft ? `${event.chain || 'ethereum'}/${event.nft.contract}/${event.nft.identifier}` : null;
+            // Extract NFT info - REST API uses 'asset' field, not 'nft'
+            const asset = event.asset;
+            const criteria = event.criteria;
+
+            let nftId = null;
+            let collectionName = 'Unknown Collection';
+            let collectionSlug = 'unknown';
+
+            if (asset) {
+                // Direct NFT event
+                nftId = `${event.chain || 'ethereum'}/${asset.contract}/${asset.identifier}`;
+                collectionName = asset?.name || asset?.collection || 'Unknown Collection';
+                collectionSlug = asset?.collection || 'unknown';
+            } else if (criteria) {
+                // Collection-level offer/bid
+                collectionName = criteria?.collection?.slug || 'Unknown Collection';
+                collectionSlug = criteria?.collection?.slug || 'unknown';
+                logger.debug(`Collection-level event for ${collectionSlug}`);
+            }
+
+            // Determine currency symbol based on payment token and chain configuration
+            const getCurrencySymbol = (payment) => {
+                if (!payment) return 'ETH';
+
+                const tokenAddress = payment.token_address?.toLowerCase();
+                const symbol = payment.symbol || 'ETH';
+                const chain = event.chain || 'ethereum';
+
+                // Common token mappings with dynamic native currency
+                const tokenMap = {
+                    '0x0000000000000000000000000000000000000000': getNativeCurrencySymbol(chain),
+                    '0x4200000000000000000000000000000000000006': 'WETH', // Base WETH
+                    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH', // Ethereum WETH
+                    '0x82af49447d8a07e3bd95bd0d56f35241523fbab1': 'WETH', // Arbitrum WETH
+                    '0x7ceb23fD6bC0adD59E62ac25578270cFf1b9f619': 'WMATIC', // Polygon WMATIC
+                    '0x48b62137EdfA95a428D35C09E44256a739F6B557': 'WAPE', // ApeChain WAPE
+                };
+
+                // If it's the native token for the chain
+                if (!tokenAddress || tokenAddress === '0x0000000000000000000000000000000000000000') {
+                    const nativeSymbol = getNativeCurrencySymbol(chain);
+                    logger.debug(`Native token detected for ${chain}, using ${nativeSymbol}`);
+                    return nativeSymbol;
+                }
+
+                // Check token mappings
+                const mappedSymbol = tokenMap[tokenAddress];
+                if (mappedSymbol) {
+                    logger.debug(`Mapped token address to ${mappedSymbol}`);
+                    return mappedSymbol;
+                }
+
+                // Fall back to symbol from payment data
+                logger.debug(`Using payment symbol: ${symbol} (chain: ${chain}, tokenAddress: ${tokenAddress})`);
+                return symbol;
+            };
 
             // Build transformed event
             const transformedEvent = {
                 event_type: eventType,
                 event_timestamp: event.event_timestamp,
+                chain: event.chain || 'ethereum',
                 payload: {
                     item: {
                         nft_id: nftId,
                         metadata: {
-                            name: event.nft?.name || 'Unknown NFT',
-                            image_url: event.nft?.image_url
+                            name: asset?.name || 'Unknown NFT',
+                            image_url: asset?.image_url || asset?.display_image_url
                         }
                     },
                     collection: {
-                        slug: event.nft?.collection || 'unknown',
-                        name: event.nft?.collection || 'Unknown Collection'
+                        slug: collectionSlug,
+                        name: collectionName
                     }
                 }
             };
 
-            // Add event-specific data
+            // Add event-specific data with currency information
             if (event.event_type === 'sale' && event.payment) {
                 transformedEvent.payload.sale_price = event.payment.quantity || '0';
+                transformedEvent.payload.currency = getCurrencySymbol(event.payment);
                 transformedEvent.payload.from_account = { address: event.seller || event.from_address };
                 transformedEvent.payload.to_account = { address: event.buyer || event.to_address };
             } else if (event.event_type === 'transfer') {
@@ -580,9 +649,24 @@ export class PollingMonitorService {
                 transformedEvent.payload.to_account = { address: event.to_address };
             } else if (event.event_type === 'order') {
                 // Distinguish between listing and bid based on order type
-                const isOffer = event.order_type === 'criteria' || event.order_type === 'offer';
-                transformedEvent.event_type = isOffer ? 'item_received_bid' : 'item_listed';
-                transformedEvent.payload.base_price = event.payment?.quantity || '0';
+                const isCollectionOffer = event.order_type === 'collection_offer';
+                const isCriteriaOffer = event.order_type === 'criteria';
+                const isRegularOffer = event.order_type === 'offer';
+
+                const currency = getCurrencySymbol(event.payment);
+
+                if (isCollectionOffer || isCriteriaOffer || isRegularOffer) {
+                    transformedEvent.event_type = 'item_received_bid';
+                    transformedEvent.payload.bid_amount = event.payment?.quantity || '0';
+                    transformedEvent.payload.currency = currency;
+                    transformedEvent.payload.is_collection_offer = isCollectionOffer;
+                } else {
+                    // Default to listing for other order types
+                    transformedEvent.event_type = 'item_listed';
+                    transformedEvent.payload.base_price = event.payment?.quantity || '0';
+                    transformedEvent.payload.currency = currency;
+                }
+
                 transformedEvent.payload.maker = { address: event.maker };
             } else if (event.event_type === 'cancel') {
                 transformedEvent.payload.maker = { address: event.maker || event.from_address };
