@@ -161,22 +161,16 @@ export function analyzePasswordStrength(password) {
   const feedback = [];
 
   // Length scoring
-  if (password.length >= 16) score += 2;
-  else if (password.length >= 12) score += 1;
-  else feedback.push('Password should be at least 12 characters long');
+  if (password.length >= 16) {score += 2;} else if (password.length >= 12) {score += 1;} else {feedback.push('Password should be at least 12 characters long');}
 
   // Character variety
-  if (/[a-z]/.test(password)) score += 1;
-  else feedback.push('Include lowercase letters');
+  if (/[a-z]/.test(password)) {score += 1;} else {feedback.push('Include lowercase letters');}
 
-  if (/[A-Z]/.test(password)) score += 1;
-  else feedback.push('Include uppercase letters');
+  if (/[A-Z]/.test(password)) {score += 1;} else {feedback.push('Include uppercase letters');}
 
-  if (/[0-9]/.test(password)) score += 1;
-  else feedback.push('Include numbers');
+  if (/[0-9]/.test(password)) {score += 1;} else {feedback.push('Include numbers');}
 
-  if (/[^a-zA-Z0-9]/.test(password)) score += 1;
-  else feedback.push('Include special characters');
+  if (/[^a-zA-Z0-9]/.test(password)) {score += 1;} else {feedback.push('Include special characters');}
 
   // Entropy calculation (simplified)
   const charset = [
@@ -189,8 +183,7 @@ export function analyzePasswordStrength(password) {
   const entropy = password.length * Math.log2(charset);
 
   let strength = 'weak';
-  if (entropy >= 60) strength = 'strong';
-  else if (entropy >= 40) strength = 'moderate';
+  if (entropy >= 60) {strength = 'strong';} else if (entropy >= 40) {strength = 'moderate';}
 
   return {
     score: Math.min(score, 6),
@@ -209,7 +202,7 @@ export function analyzePasswordStrength(password) {
  */
 export function constantTimeEquals(a, b) {
   if (Buffer.isBuffer(a) && Buffer.isBuffer(b)) {
-    if (a.length !== b.length) return false;
+    if (a.length !== b.length) {return false;}
     return timingSafeEqual(a, b);
   }
 
@@ -217,6 +210,6 @@ export function constantTimeEquals(a, b) {
   const bufA = Buffer.isBuffer(a) ? a : Buffer.from(a, 'utf8');
   const bufB = Buffer.isBuffer(b) ? b : Buffer.from(b, 'utf8');
 
-  if (bufA.length !== bufB.length) return false;
+  if (bufA.length !== bufB.length) {return false;}
   return timingSafeEqual(bufA, bufB);
 }

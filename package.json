@@ -56,8 +56,11 @@
         "setupFilesAfterEnv": ["./jest.setup.js"],
         "verbose": true,
         "expand": true,
-        "forceExit": false,
+        "forceExit": true,
+        "detectOpenHandles": true,
+        "maxWorkers": 1,
         "passWithNoTests": false,
+        "watchman": false,
         "collectCoverageFrom": [
             "src/**/*.js",
             "!src/__tests__/**",
