@@ -160,7 +160,7 @@ export function setupEthersProxy() {
     });
 
     proxyRegistered = true;
-    logger.info(`✅ Proxy configured for ethers.js: ${proxyUrl}`);
+    // logger.info(`✅ Proxy configured for ethers.js: ${proxyUrl}`);
   } catch (error) {
     logger.error('Failed to setup proxy:', error.message);
     throw error;

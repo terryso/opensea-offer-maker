@@ -5,12 +5,12 @@ import { bootstrap } from 'global-agent';
 if (!process.env.GLOBAL_AGENT_HTTP_PROXY) {
   const proxyUrl = process.env.HTTP_PROXY || process.env.HTTPS_PROXY || 'http://127.0.0.1:7890';
   process.env.GLOBAL_AGENT_HTTP_PROXY = proxyUrl;
-  console.log(`[Global Agent] Setting proxy to: ${proxyUrl}`);
+  // console.log(`[Global Agent] Setting proxy to: ${proxyUrl}`);
 }
 
 // 启用全局代理（拦截所有 http/https 请求）
 bootstrap();
-console.log('[Global Agent] Bootstrap completed');
+// console.log('[Global Agent] Bootstrap completed');
 
 import { Command } from 'commander';
 import {

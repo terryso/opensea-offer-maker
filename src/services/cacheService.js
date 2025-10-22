@@ -453,6 +453,102 @@ export class CacheService {
       throw error;
     }
   }
+
+  /**
+   * Get cached collections for interactive mode
+   * @param {string} walletAddress - Wallet address
+   * @param {string} chain - Chain identifier
+   * @returns {Promise<Array>} Array of cached collections
+   */
+  async getCachedCollections(walletAddress, chain) {
+    try {
+      const cacheData = await this.loadCache(walletAddress, chain);
+
+      if (!cacheData || !cacheData.nfts || cacheData.nfts.length === 0) {
+        return [];
+      }
+
+      // Extract unique collections from cached NFTs
+      const collections = new Map();
+
+      for (const nft of cacheData.nfts) {
+        // Handle both string collection name and collection object structures
+        let collectionKey, collectionName, collectionSlug, collectionAddress;
+
+        if (typeof nft.collection === 'string') {
+          // Collection is just a string (like "chonks")
+          collectionKey = nft.collection;
+          collectionName = nft.collection.charAt(0).toUpperCase() + nft.collection.slice(1);
+          collectionSlug = nft.collectionSlug || nft.collection;
+          collectionAddress = nft.contract; // Use contract address as fallback
+        } else if (nft.collection && typeof nft.collection === 'object') {
+          // Collection is an object
+          collectionKey = nft.collection.slug || nft.collection.address || nft.contract;
+          collectionName = nft.collection.name || `Collection ${collectionKey}`;
+          collectionSlug = nft.collection.slug;
+          collectionAddress = nft.collection.address || nft.contract;
+        } else {
+          // No collection info, skip this NFT
+          continue;
+        }
+
+        if (!collections.has(collectionKey)) {
+          collections.set(collectionKey, {
+            slug: collectionSlug,
+            name: collectionName,
+            address: collectionAddress,
+            image_url: nft.imageUrl,
+            nft_count: 0
+          });
+        }
+
+        const collection = collections.get(collectionKey);
+        collection.nft_count++;
+      }
+
+      return Array.from(collections.values());
+    } catch (error) {
+      logger.error('Failed to get cached collections:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get cached NFTs for a specific collection
+   * @param {string} collectionSlug - Collection slug
+   * @param {string} walletAddress - Wallet address
+   * @param {string} chain - Chain identifier
+   * @returns {Promise<Array>} Array of cached NFTs for the collection
+   */
+  async getCachedNFTs(collectionSlug, walletAddress, chain) {
+    try {
+      // Load cache data for specific wallet and chain
+      const cacheData = await this.loadCache(walletAddress, chain);
+
+      if (!cacheData || !cacheData.nfts) {
+        logger.debug(`No cache data found for wallet ${walletAddress} on chain ${chain}`);
+        return [];
+      }
+
+      // Filter NFTs by collection slug
+      const collectionNFTs = cacheData.nfts.filter(nft => {
+        // Handle both string collection name and collection object structures
+        if (typeof nft.collection === 'string') {
+          return nft.collectionSlug === collectionSlug || nft.collection === collectionSlug;
+        } else if (nft.collection && typeof nft.collection === 'object') {
+          return nft.collection.slug === collectionSlug;
+        }
+        return false;
+      });
+
+      logger.debug(`Found ${collectionNFTs.length} NFTs for collection ${collectionSlug} (${walletAddress} on ${chain})`);
+      return collectionNFTs;
+
+    } catch (error) {
+      logger.error('Failed to get cached NFTs:', error);
+      return [];
+    }
+  }
 }
 
 export default CacheService;
