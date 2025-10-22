@@ -214,7 +214,8 @@ const context = await new ExecutionContext(options).init();
 
 **涉及服务:**
 - `BuyService` (312行)
-- `OfferService` (重构后的核心服务)
+- `OfferService` (核心出价服务)
+- **注意**: `list` 命令的逻辑已被重构到 `src/listing` 模块中，而不是一个新的服务类，因此不在此次服务层现代化的范围内。
 - `CacheService` (458行)
 - `StreamService` (382行)
 - `NotificationService` (649行)
