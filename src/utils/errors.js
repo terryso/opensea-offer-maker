@@ -1,7 +1,12 @@
 /**
+ * Custom Error Classes
+ * Provides structured error handling with detailed context
+ */
+/* global URL */
+/**
  * Custom error type hierarchy for secure error handling
  *
- * This module provides a structured approach to error handling with
+ * Provides a structured approach to error handling with
  * built-in security features like context sanitization and unique error IDs.
  */
 

@@ -118,7 +118,7 @@ export function verifyHMAC(data, expectedHmac, key) {
   try {
     const actualHmac = createHMAC(data, key);
     return timingSafeEqual(Buffer.from(actualHmac, 'hex'), Buffer.from(expectedHmac, 'hex'));
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }

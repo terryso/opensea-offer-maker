@@ -4,7 +4,7 @@
  * This module provides secure sanitization of error messages to prevent
  * leakage of sensitive information like private keys, API keys, passwords, etc.
  */
-
+/* global URL */
 /**
  * Sensitive data patterns for detection and replacement
  */

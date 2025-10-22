@@ -377,7 +377,7 @@ export class KeyManager {
       const keyData = await loadKeyFile(session);
 
       return Object.entries(keyData.keys)
-        .filter(([name, data]) => data && (data.encryptedKey || data.encryptedData) && data.address)
+        .filter(([_name, data]) => data && (data.encryptedKey || data.encryptedData) && data.address)
         .map(([name, data]) => ({
           name,
           address: data.address,

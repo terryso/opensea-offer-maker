@@ -22,7 +22,7 @@ export class ConfigManager {
       const data = await this._fs.readFile(this._configFile, 'utf8');
       const config = JSON.parse(data);
       return config.defaultChain || null;
-    } catch (error) {
+    } catch (_error) {
       // 配置文件不存在或无效
       return null;
     }
@@ -46,7 +46,7 @@ export class ConfigManager {
       try {
         const data = await this._fs.readFile(this._configFile, 'utf8');
         config = JSON.parse(data);
-      } catch (error) {
+      } catch (_error) {
         // 配置文件不存在，使用空对象
       }
 

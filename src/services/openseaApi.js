@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger.js';
 import axios from 'axios';
+/* global URL */
 import { ethers } from 'ethers';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { Seaport } from '@opensea/seaport-js';

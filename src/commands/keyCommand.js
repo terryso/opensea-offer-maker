@@ -152,8 +152,8 @@ keyCommand
     try {
       await KeyManager.removeKey(name);
       logger.info(`Key "${name}" removed successfully`);
-    } catch (error) {
-      logger.error('Failed to remove key:', error.message);
+    } catch (_error) {
+      logger.error('Failed to delete private key');
       process.exit(1);
     }
   });

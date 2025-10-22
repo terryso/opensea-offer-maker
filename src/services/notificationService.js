@@ -1,5 +1,5 @@
 import { formatUnits } from 'ethers';
-import { readFile, writeFile, mkdir, readdir, stat, unlink } from 'fs/promises';
+import { readFile, writeFile, mkdir, readdir, unlink } from 'fs/promises';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 
@@ -414,8 +414,8 @@ Cancelled By: ${this._truncateAddress(maker)}`;
           }
 
           events.push(event);
-        } catch (parseError) {
-          logger.error('Malformed JSON line in event log:', parseError.message);
+        } catch (error) {
+          logger.error('Malformed JSON line in event log:', error.message);
           // Skip malformed lines and continue
         }
       }
