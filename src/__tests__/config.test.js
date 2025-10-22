@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 
-import { jest } from '@jest/globals';
+import { jest, expect } from '@jest/globals';
 
 describe('config.js', () => {
     let originalEnv;
@@ -222,7 +222,7 @@ describe('config.js', () => {
 
             try {
                 await import('../config.js');
-                fail('Should have thrown an error');
+                expect(true).toBe(false); // Should have thrown an error
             } catch (error) {
                 expect(error.message).toContain('Missing environment variables');
                 expect(error.code).toBe('ENV_MISSING');

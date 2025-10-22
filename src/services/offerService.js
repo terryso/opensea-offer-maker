@@ -162,21 +162,21 @@ export class OfferService {
       excludeOptionalCreatorFees: true,
     });
 
-    console.log(`Successfully created an individual NFT offer with orderHash: ${response.orderHash}`);
+    logger.info(`Successfully created an individual NFT offer with orderHash: ${response.orderHash}`);
     return response.orderHash;
   }
 
   logCollectionOfferDetails(response, collectionSlug, orderHash) {
-    console.log(`Successfully created a collection offer for: ${collectionSlug}`);
-    console.log('Offer Details:');
-    console.log(`- Collection Slug: ${response.criteria.collection.slug}`);
-    console.log(`- Contract Address: ${response.criteria.contract.address}`);
+    logger.info(`Successfully created a collection offer for: ${collectionSlug}`);
+    logger.info('Offer Details:');
+    logger.info(`- Collection Slug: ${response.criteria.collection.slug}`);
+    logger.info(`- Contract Address: ${response.criteria.contract.address}`);
 
     const priceInWETH = ethers.formatUnits(response.price.value, response.price.decimals);
-    console.log(`- Price: ${priceInWETH} ${response.price.currency}`);
+    logger.info(`- Price: ${priceInWETH} ${response.price.currency}`);
 
-    console.log(`- Order Hash: ${orderHash}`);
-    console.log(`- Chain: ${response.chain}`);
+    logger.info(`- Order Hash: ${orderHash}`);
+    logger.info(`- Chain: ${response.chain}`);
   }
 }
 

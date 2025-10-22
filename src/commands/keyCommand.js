@@ -152,7 +152,7 @@ keyCommand
     try {
       await KeyManager.removeKey(name);
       logger.info(`Key "${name}" removed successfully`);
-    } catch (_error) {
+    } catch {
       logger.error('Failed to delete private key');
       process.exit(1);
     }
@@ -211,7 +211,7 @@ keyCommand
         } else {
           throw new Error('Invalid old key format');
         }
-      } catch (error) {
+      } catch {
         logger.debug('No old key file found or invalid format');
         throw new Error('No old key found to migrate');
       }

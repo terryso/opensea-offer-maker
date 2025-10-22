@@ -9,20 +9,11 @@ const currentDirPath = dirname(currentFilePath);
 const TEST_CONFIG_FILE = path.join(currentDirPath, '../../../.config.test');
 
 describe('ConfigManager Integration Tests', () => {
-    // Override CONFIG_FILE for testing
-    let originalConfigFile;
-
-    beforeAll(() => {
-        // This is a hacky way but necessary for testing file operations
-        const configManagerModule = require('../../utils/configManager.js');
-        // We'll use a test config file
-    });
-
     beforeEach(async () => {
         // Clean up test config file before each test
         try {
             await fs.unlink(TEST_CONFIG_FILE);
-        } catch (error) {
+        } catch {
             // File doesn't exist, that's fine
         }
     });
@@ -31,7 +22,7 @@ describe('ConfigManager Integration Tests', () => {
         // Clean up test config file after each test
         try {
             await fs.unlink(TEST_CONFIG_FILE);
-        } catch (error) {
+        } catch {
             // File doesn't exist, that's fine
         }
     });
@@ -88,7 +79,7 @@ describe('ConfigManager Integration Tests', () => {
     describe('complete workflow integration', () => {
         it('should handle first time setup', async () => {
             // Get default chain (should be null or current value)
-            const initialChain = await ConfigManager.getDefaultChain();
+            await ConfigManager.getDefaultChain();
 
             // Set to base
             const setResult = await ConfigManager.setDefaultChain('base');

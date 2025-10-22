@@ -11,13 +11,11 @@ import {
   CommandErrorMiddleware
 } from '../utils/errorHandler.js';
 import {
-  BaseError,
   ValidationError,
   ConfigurationError,
   NetworkError,
   SecurityError,
-  SystemError,
-  isCustomError
+  SystemError
 } from '../utils/errors.js';
 
 describe('ErrorContext', () => {

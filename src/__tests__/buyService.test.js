@@ -13,6 +13,7 @@ import {
 } from '../services/buyService.js';
 import { ethers } from 'ethers';
 import enquirer from 'enquirer';
+import { logger } from '../utils/logger.js';
 
 describe('BuyService', () => {
     describe('validatePrice', () => {
@@ -117,7 +118,7 @@ describe('BuyService', () => {
             const minPrice = Math.min(...prices);
 
             // 过滤出最便宜的那批
-            const cheapestListings = mockListings.filter((l, index) => {
+            const cheapestListings = mockListings.filter((l) => {
                 const price = parseFloat(ethers.formatEther(l.price.current.value));
                 return price === minPrice;
             });
@@ -757,17 +758,18 @@ describe('BuyService', () => {
 
     describe('confirmPurchase', () => {
         let mockPrompt;
+        let mockLoggerInfo;
 
         beforeEach(() => {
-            // Mock console.log to avoid cluttering test output
-            jest.spyOn(console, 'log').mockImplementation(() => {});
+            // Mock logger.info to avoid cluttering test output
+            mockLoggerInfo = jest.spyOn(logger, 'info').mockImplementation(() => {});
 
             // Mock enquirer prompt
             mockPrompt = jest.spyOn(enquirer, 'prompt');
         });
 
         afterEach(() => {
-            console.log.mockRestore();
+            mockLoggerInfo.mockRestore();
             mockPrompt.mockRestore();
         });
 
@@ -816,8 +818,8 @@ describe('BuyService', () => {
 
             await confirmPurchase(nftInfo, 0.0001);
 
-            // Verify console.log was called with collection info
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Collection: cool-nfts'));
+            // Verify logger.info was called with collection info
+            expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining('Collection: cool-nfts'));
         });
 
         it('should format gas fee correctly for small amounts (< 0.0001 ETH)', async () => {
@@ -834,7 +836,7 @@ describe('BuyService', () => {
             await confirmPurchase(nftInfo, 0.00005);
 
             // Check that gas was formatted in gwei
-            expect(console.log).toHaveBeenCalledWith(expect.stringContaining('gwei'));
+            expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining('gwei'));
         });
 
         it('should format gas fee correctly for larger amounts (>= 0.0001 ETH)', async () => {
@@ -851,7 +853,7 @@ describe('BuyService', () => {
             await confirmPurchase(nftInfo, 0.001);
 
             // Check that gas was formatted in ETH (without gwei)
-            const gasLogCall = console.log.mock.calls.find(call =>
+            const gasLogCall = mockLoggerInfo.mock.calls.find(call =>
                 call[0] && call[0].includes('Estimated Gas:')
             );
             expect(gasLogCall).toBeDefined();
@@ -880,7 +882,7 @@ describe('BuyService', () => {
                 getListingByTokenId: jest.fn()
             };
 
-            jest.spyOn(console, 'log').mockImplementation(() => {});
+            jest.spyOn(logger, 'info').mockImplementation(() => {});
             mockPrompt = jest.spyOn(enquirer, 'prompt');
 
             // Setup default mocks
@@ -893,7 +895,6 @@ describe('BuyService', () => {
         });
 
         afterEach(() => {
-            console.log.mockRestore();
             mockPrompt.mockRestore();
         });
 
@@ -983,7 +984,7 @@ describe('BuyService', () => {
                 getBestListings: jest.fn()
             };
 
-            jest.spyOn(console, 'log').mockImplementation(() => {});
+            jest.spyOn(logger, 'info').mockImplementation(() => {});
             mockPrompt = jest.spyOn(enquirer, 'prompt');
 
             // Setup default mocks
@@ -996,7 +997,6 @@ describe('BuyService', () => {
         });
 
         afterEach(() => {
-            console.log.mockRestore();
             mockPrompt.mockRestore();
         });
 

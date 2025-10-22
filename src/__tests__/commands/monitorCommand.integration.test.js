@@ -7,7 +7,6 @@ import { monitorCommand } from '../../commands/monitorCommand.js';
 import { StreamService } from '../../services/streamService.js';
 import { NotificationService } from '../../services/notificationService.js';
 import { KeyManager } from '../../utils/keyManager.js';
-import { ethers } from 'ethers';
 
 // Mock dependencies
 jest.mock('../../services/streamService.js');

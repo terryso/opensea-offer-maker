@@ -9,7 +9,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { hostname } from 'os';
 import { sanitizeErrorMessage, sanitizeObject } from './errorSanitizer.js';
-import { ValidationError, isCustomError } from './errors.js';
+import { isCustomError } from './errors.js';
 import logger from './logger.js';
 
 /**
@@ -339,7 +339,7 @@ export class SecureLogger {
           return { timestamp: new Date().toISOString(), level: 'info', message: line };
         }
       });
-    } catch (error) {
+    } catch {
       return [];
     }
   }
@@ -368,7 +368,7 @@ export class SecureLogger {
         }
         return true;
       });
-    } catch (error) {
+    } catch {
       return [];
     }
   }

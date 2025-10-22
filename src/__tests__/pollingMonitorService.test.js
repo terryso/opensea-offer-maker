@@ -686,7 +686,7 @@ describe('PollingMonitorService', () => {
                 };
 
                 // Act - should not throw
-                const result = await service._processEvent(event, '0x123');
+                await service._processEvent(event, '0x123');
 
                 // Assert - callback error should be handled gracefully
                 expect(errorCallback).toHaveBeenCalled();
@@ -715,7 +715,6 @@ describe('PollingMonitorService', () => {
                 service = new PollingMonitorService({ chainConfig: testChainConfig });
 
                 // Mock the connection process to fail
-                const originalState = service.connectionState;
                 service.connectionState = PollingMonitorService.ConnectionState.CONNECTING;
 
                 // Act & Assert - should throw error when trying to connect while already connecting

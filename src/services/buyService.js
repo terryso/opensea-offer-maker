@@ -108,7 +108,7 @@ export async function buyFloorNFT(sdk, collectionSlug, wallet, openseaApi, optio
     logger.debug(`Floor price: ${minPrice} ETH`);
 
     // 过滤出最便宜的那批NFT
-    const cheapestListings = listings.filter((l, index) => {
+    const cheapestListings = listings.filter((l) => {
       const priceStr = l.price?.current?.value || l.current_price || '0';
       const price = parseFloat(ethers.formatEther(priceStr));
       return price === minPrice;
@@ -212,22 +212,22 @@ function formatGasFee(gasInETH) {
  * @throws {Error} 如果用户取消购买
  */
 export async function confirmPurchase(nftInfo, estimatedGas) {
-  console.log('\n' + '='.repeat(50));
-  console.log('PURCHASE CONFIRMATION');
-  console.log('='.repeat(50));
-  console.log(`Type: ${nftInfo.type}`);
+  logger.info('\n' + '='.repeat(50));
+  logger.info('PURCHASE CONFIRMATION');
+  logger.info('='.repeat(50));
+  logger.info(`Type: ${nftInfo.type}`);
   if (nftInfo.collection) {
-    console.log(`Collection: ${nftInfo.collection}`);
+    logger.info(`Collection: ${nftInfo.collection}`);
   }
-  console.log(`Contract: ${nftInfo.contractAddress}`);
-  console.log(`Token ID: ${nftInfo.tokenId}`);
-  console.log(`Price: ${nftInfo.price} ETH`);
-  console.log(`Estimated Gas: ${formatGasFee(estimatedGas)}`);
-  console.log(`Total (approx): ${(nftInfo.price + estimatedGas).toFixed(6)} ETH`);
-  console.log(`Seller: ${nftInfo.seller}`);
-  console.log('='.repeat(50));
-  console.log('⚠️  Note: This will execute a real transaction on the blockchain.');
-  console.log('='.repeat(50) + '\n');
+  logger.info(`Contract: ${nftInfo.contractAddress}`);
+  logger.info(`Token ID: ${nftInfo.tokenId}`);
+  logger.info(`Price: ${nftInfo.price} ETH`);
+  logger.info(`Estimated Gas: ${formatGasFee(estimatedGas)}`);
+  logger.info(`Total (approx): ${(nftInfo.price + estimatedGas).toFixed(6)} ETH`);
+  logger.info(`Seller: ${nftInfo.seller}`);
+  logger.info('='.repeat(50));
+  logger.info('⚠️  Note: This will execute a real transaction on the blockchain.');
+  logger.info('='.repeat(50) + '\n');
 
   const response = await enquirer.prompt({
     type: 'confirm',

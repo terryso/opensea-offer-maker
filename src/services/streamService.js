@@ -132,8 +132,8 @@ export class StreamService {
         this.client.onError(handleError);
       } else if (typeof this.client.on === 'function') {
         try { this.client.on('error', handleError); } catch (e) { logger.warn('Failed to bind error event via on("error"): ' + e.message); }
-        try { this.client.on('connect_error', handleError); } catch {}
-        try { this.client.on('disconnect', () => handleError(new Error('Disconnected'))); } catch {}
+        try { this.client.on('connect_error', handleError); } catch { /* Event not supported */ }
+        try { this.client.on('disconnect', () => handleError(new Error('Disconnected'))); } catch { /* Event not supported */ }
       } else {
         logger.warn('OpenSeaStreamClient has no onError or on() API; error handling may be limited');
       }
@@ -321,7 +321,7 @@ export class StreamService {
      * Handle connection errors and trigger reconnection logic
      * @private
      */
-  _handleConnectionError(error) {
+  _handleConnectionError(_error) {
     if (this.connectionState === StreamService.ConnectionState.DISCONNECTED) {
       // Already disconnected, don't attempt reconnection
       return;

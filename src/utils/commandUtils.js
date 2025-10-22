@@ -2,7 +2,6 @@ import { SUPPORTED_CHAINS, DEFAULT_CHAIN } from '../config.js';
 import { ConfigManager } from '../utils/configManager.js';
 import { ethers } from 'ethers';
 import { KeyManager } from '../utils/keyManager.js';
-import enquirer from 'enquirer';
 
 export const addChainOption = (command) => {
   return command.option(

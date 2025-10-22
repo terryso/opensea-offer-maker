@@ -173,10 +173,9 @@ describe('ConfigManager', () => {
         });
 
         it('should accept polygon chain', async () => {
-            let writtenData;
             ConfigManager._fs = {
                 readFile: async () => { throw new Error('ENOENT'); },
-                writeFile: async (path, data) => { writtenData = data; }
+                writeFile: async () => { }
             };
 
             const result = await ConfigManager.setDefaultChain('polygon');
@@ -184,10 +183,9 @@ describe('ConfigManager', () => {
         });
 
         it('should accept arbitrum chain', async () => {
-            let writtenData;
             ConfigManager._fs = {
                 readFile: async () => { throw new Error('ENOENT'); },
-                writeFile: async (path, data) => { writtenData = data; }
+                writeFile: async () => { }
             };
 
             const result = await ConfigManager.setDefaultChain('arbitrum');

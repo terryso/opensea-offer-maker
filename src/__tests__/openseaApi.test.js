@@ -46,11 +46,10 @@ jest.unstable_mockModule('../utils/logger.js', () => ({
 
 // Now import the module under test
 const { OpenSeaApi } = await import('../services/openseaApi.js');
-const { CacheService } = await import('../services/cacheService.js');
 
 // Mock setTimeout to avoid real delays
 const originalSetTimeout = global.setTimeout;
-global.setTimeout = (fn, delay) => {
+global.setTimeout = (fn) => {
     return originalSetTimeout(fn, 0);
 };
 

@@ -87,5 +87,12 @@ export default [
       'indent': 'off',      // Allow flexible indentation in tests
       'space-in-parens': 'off' // Allow flexible spacing in tests
     }
+  },
+  // Override rules for logger implementation
+  {
+    files: ['**/utils/logger.js'],
+    rules: {
+      'no-console': 'off' // Allow console in logger implementation
+    }
   }
 ];

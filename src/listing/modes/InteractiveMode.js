@@ -51,7 +51,7 @@ export async function executeInteractiveMode(options, context) {
   try {
     while (currentStep !== FLOW_STEPS.DONE && currentStep !== FLOW_STEPS.CANCELLED) {
       switch (currentStep) {
-      case FLOW_STEPS.SELECT_COLLECTION:
+      case FLOW_STEPS.SELECT_COLLECTION: {
         const collectionResult = await selectCollection(cacheService, walletAddress, chain);
         if (collectionResult === CANCEL_SIGNAL) {
           currentStep = FLOW_STEPS.CANCELLED;
@@ -65,8 +65,9 @@ export async function executeInteractiveMode(options, context) {
         selectedCollection = collectionResult;
         currentStep = FLOW_STEPS.SELECT_NFT;
         break;
+      }
 
-      case FLOW_STEPS.SELECT_NFT:
+      case FLOW_STEPS.SELECT_NFT: {
         const nftResult = await selectNFT(selectedCollection, cacheService, walletAddress, chain);
         if (nftResult === CANCEL_SIGNAL) {
           currentStep = FLOW_STEPS.CANCELLED;
@@ -79,8 +80,9 @@ export async function executeInteractiveMode(options, context) {
         selectedNFT = nftResult;
         currentStep = FLOW_STEPS.SELECT_PRICING_METHOD;
         break;
+      }
 
-      case FLOW_STEPS.SELECT_PRICING_METHOD:
+      case FLOW_STEPS.SELECT_PRICING_METHOD: {
         const methodResult = await selectPricingMethod(selectedNFT, apiContext.openseaApi, apiContext.chainConfig);
         if (methodResult === CANCEL_SIGNAL) {
           currentStep = FLOW_STEPS.CANCELLED;
@@ -94,8 +96,9 @@ export async function executeInteractiveMode(options, context) {
         pricingValue = methodResult.value;
         currentStep = FLOW_STEPS.CONFIRM;
         break;
+      }
 
-      case FLOW_STEPS.CONFIRM:
+      case FLOW_STEPS.CONFIRM: {
         const confirmResult = await confirmListing(
           selectedNFT,
           pricingMethod,
@@ -115,6 +118,7 @@ export async function executeInteractiveMode(options, context) {
         // Listing completed successfully
         currentStep = FLOW_STEPS.DONE;
         return confirmResult;
+      }
       }
     }
 
@@ -240,10 +244,10 @@ async function selectNFT(collection, cacheService, walletAddress, chain) {
  * Handle pricing method selection
  * @param {Object} nft - Selected NFT
  * @param {OpenSeaApi} openseaApi - OpenSea API instance
- * @param {Object} chainConfig - Chain configuration
+ * @param {Object} _chainConfig - Chain configuration
  * @returns {Promise<Object|string>} Pricing method selection or special signal
  */
-async function selectPricingMethod(nft, openseaApi, chainConfig) {
+async function selectPricingMethod(nft, openseaApi, _chainConfig) {
   logger.info('\n💰 Choose pricing strategy:');
 
   const choices = [

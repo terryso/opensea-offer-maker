@@ -1,6 +1,7 @@
 import { OpenSeaSDK, Chain } from 'opensea-js';
 import { ethers } from 'ethers';
 import dotenv from 'dotenv';
+import { OfferService } from '../services/offerService.js';
 
 dotenv.config();
 

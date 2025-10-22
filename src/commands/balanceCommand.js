@@ -47,7 +47,7 @@ balanceCommand.action(async (options) => {
 
     // 查询每个代币的余额
     logger.info('\n余额:');
-    for (const [tokenKey, tokenConfig] of Object.entries(tokensToQuery)) {
+    for (const tokenConfig of Object.values(tokensToQuery)) {
       let balance;
 
       if (tokenConfig.isNative) {

@@ -56,7 +56,7 @@ describe('listCommand', () => {
         expect(optionFlags.some(flag => flag.includes('chain'))).toBeTruthy();
         // Note: Private key option may be handled differently in the refactored version
         // Let's check for any key-related option
-        const hasKeyOption = optionFlags.some(flag =>
+        optionFlags.some(flag =>
             flag.includes('private-key') ||
             flag.includes('key-name') ||
             flag.includes('key')

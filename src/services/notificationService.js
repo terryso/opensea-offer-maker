@@ -496,7 +496,7 @@ Cancelled By: ${this._truncateAddress(maker)}`;
                 if (eventDate >= cutoffDate) {
                   recentLines.push(line);
                 }
-              } catch (parseError) {
+              } catch {
                 // Keep malformed lines for manual review
                 recentLines.push(line);
               }

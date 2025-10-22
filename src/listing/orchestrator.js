@@ -143,13 +143,13 @@ export async function getListingInformation(listingData, apiContext) {
 }
 
 /**
- * Execute listing on OpenSea
- * @param {Object} listingData - Complete listing data
+ * Execute OpenSea listing
+ * @param {Object} listingData - Listing data (nft, price, etc.)
  * @param {Object} apiContext - API context (openseaApi, feeInfo, etc.)
- * @param {Object} options - Command options
+ * @param {Object} _options - Command options
  * @returns {Promise<Object>} Listing result
  */
-export async function executeOpenSeaListing(listingData, apiContext, options) {
+export async function executeOpenSeaListing(listingData, apiContext, _options) {
   const { nft, price, expirationTime, payOptionalRoyalties, wallet } = listingData;
   const { openseaApi, feeInfo } = apiContext;
 

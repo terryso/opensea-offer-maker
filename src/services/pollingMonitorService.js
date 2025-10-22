@@ -430,10 +430,10 @@ export class PollingMonitorService {
      * Process a single event
      * @private
      * @param {Object} event - Event from OpenSea REST API
-     * @param {string} walletAddress - Wallet address that this event is for
+     * @param {string} _walletAddress - Wallet address that this event is for
      * @returns {boolean} True if event was processed, false if skipped
      */
-  async _processEvent(event, walletAddress) {
+  async _processEvent(event, _walletAddress) {
     try {
       // Generate unique event ID
       const eventId = this._generateEventId(event);
