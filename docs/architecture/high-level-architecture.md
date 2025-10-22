@@ -64,6 +64,7 @@ graph TB
     end
 
     subgraph "业务逻辑层 - 核心服务"
+        ListingModule[Listing Module<br/>挂单流程]
         OfferSvc[OfferService<br/>出价服务]
         StrategySvc[OfferStrategy<br/>策略引擎<br/>⚠️ 复杂]
         StreamSvc[StreamService<br/>流式服务<br/>⚠️ WebSocket]
@@ -119,7 +120,7 @@ graph TB
     AutoCmd --> StrategySvc
     MonitorCmd --> StreamSvc
     MonitorCmd --> PollingSvc
-    ListCmd --> OfferSvc
+    ListCmd --> ListingModule
     BuyCmd --> BuySvc
     KeyCmd --> KeyMgr
     BalanceCmd --> CmdUtils
@@ -173,9 +174,11 @@ graph TB
   - **理由**：促进单一职责，依赖注入，提高可测试性
   - **实现**：8个核心服务类，清晰的接口定义
 
-- **策略模式**：OfferStrategy 类中的自动竞价算法
-  - **理由**：封装复杂的竞价策略，支持算法切换
-  - **实现**：价格计算、地板价验证、出价时机判断
+- **策略模式**：
+  - **`OfferStrategy`**: 封装了复杂的自动竞价算法。
+  - **`ListingModes`**: 在 `list` 命令中，根据用户输入（`--interactive`）在不同的挂单模式（`InteractiveMode`, `DirectMode`）之间切换，这是一个典型的策略模式应用。
+  - **理由**：封装算法，使其可以独立于使用它的客户端而变化。
+  - **实现**：价格计算、地板价验证、出价时机判断、交互式与直接挂单流程分离。
 
 - **观察者模式**：实时监控和通知系统
   - **理由**：事件驱动的实时响应

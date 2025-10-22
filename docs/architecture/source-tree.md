@@ -68,13 +68,23 @@ opensea-offer-maker/
 │   │   ├── checkOffersCommand.js   # 出价查询（5.0KB）
 │   │   ├── index.js                # 命令导出（614B）
 │   │   ├── keyCommand.js           # 密钥管理（7.9KB）
-│   │   ├── listCommand.js          # 跨市场挂单（51.7KB - 最大文件）
+│   │   ├── listCommand.js          # 挂单命令路由（3.3KB）
 │   │   ├── monitorCommand.js       # 实时监控（12.9KB）
 │   │   ├── offerCommand.js         # 单次出价（3.8KB）
 │   │   ├── sendCommand.js          # 代币转账（3.1KB）
 │   │   └── swapCommand.js          # ETH/WETH兑换（4.8KB）
 │   ├── config/                     # 配置数据
 │   │   └── tokens.js               # 多链代币配置
+│   ├── listing/                    # 挂单流程协调器
+│   │   ├── modes/                  # 挂单模式 (交互式/直接)
+│   │   │   ├── DirectMode.js
+│   │   │   └── InteractiveMode.js
+│   │   ├── shared/                 # 挂单共享模块 (费用/定价/验证)
+│   │   │   ├── fees.js
+│   │   │   ├── pricing.js
+│   │   │   ├── utils.js
+│   │   │   └── validators.js
+│   │   └── orchestrator.js         # 挂单流程协调器
 │   ├── constants/                  # 系统常量
 │   │   └── chains.js               # 6条链配置（131行）
 │   ├── services/                   # 业务逻辑层（8个核心服务）
@@ -89,10 +99,16 @@ opensea-offer-maker/
 │   ├── utils/                      # 基础设施层（6个工具类）
 │   │   ├── commandUtils.js         # 命令工具（链/钱包管理）
 │   │   ├── configManager.js        # 配置管理
+│   │   ├── encryptionUtils.js      # 加密工具 (AES, scrypt)
 │   │   ├── env.js                  # 环境变量验证
+│   │   ├── errorHandler.js         # 统一错误处理中间件
+│   │   ├── errorSanitizer.js       # 错误信息清理
+│   │   ├── errors.js               # 自定义错误类型
 │   │   ├── keyManager.js           # 密钥管理器（安全关键）
 │   │   ├── logger.js               # 日志系统
-│   │   └── proxySetup.js           # 代理配置
+│   │   ├── proxySetup.js           # 代理配置
+│   │   ├── secureLogger.js         # 安全日志系统
+│   │   └── securityUtils.js        # 安全验证工具
 │   ├── cli.js                      # CLI入口点（全局代理配置）
 │   └── config.js                   # 主配置文件（环境变量验证）
 ├── .env                            # 环境变量配置（gitignored）
@@ -142,7 +158,7 @@ opensea-offer-maker/
 
 ### 模块依赖规则
 
-- **上层依赖下层**：Commands → Services → Utils
+- **上层依赖下层**：Commands → Listing → Services → Utils
 - **避免循环依赖**：严格的依赖方向
 - **接口抽象**：服务间通过明确接口交互
 - **配置注入**：依赖通过构造函数注入
@@ -154,7 +170,7 @@ opensea-offer-maker/
 **职责**：CLI 接口定义，用户输入处理，业务逻辑协调
 
 **关键文件**：
-- `listCommand.js` (51.7KB) - 最复杂的命令，交互式 NFT 挂单
+- `listCommand.js` (3.3KB) - 重构后的命令路由，将执行分派到不同的挂单模式。
 - `cacheCommand.js` (17.0KB) - 缓存管理和操作
 - `monitorCommand.js` (12.9KB) - 实时监控命令
 - `autoOfferCommand.js` (5.9KB) - 自动竞价功能
@@ -163,6 +179,20 @@ opensea-offer-maker/
 - 每个命令文件导出一个 Commander.js Command 实例
 - 统一的错误处理和用户反馈
 - 可选的调试模式和详细日志
+
+### `/src/listing/` - 挂单流程协调器
+
+**职责**：封装和协调完整的 NFT 挂单流程，是 `list` 命令重构的核心。
+
+**关键文件**：
+- `orchestrator.js` - 创建 API 上下文，协调挂单流程。
+- `modes/InteractiveMode.js` - 实现交互式挂单模式，允许用户从缓存中选择 NFT。
+- `modes/DirectMode.js` - 实现直接挂单模式，通过命令行参数直接执行。
+- `shared/` - 包含定价、费用计算、验证等挂单流程中的共享逻辑。
+
+**模式**：
+- **策略模式**：`list` 命令根据用户输入（`--interactive`）选择不同的挂单策略（`InteractiveMode` 或 `DirectMode`）。
+- **协调器模式**：`orchestrator.js` 负责准备和提供挂单所需的所有依赖和上下文。
 
 ### `/src/services/` - 业务逻辑层
 
@@ -214,11 +244,11 @@ opensea-offer-maker/
 
 ### 最大文件（复杂度指标）
 
-1. `listCommand.js` - 51.7KB（交互式挂单系统）
-2. `openseaApi.js` - 33.1KB（API 完整封装）
+1. `openseaApi.js` - 33.1KB（API 完整封装）
+2. `pollingMonitorService.js` - 25.9KB（轮询监控）
 3. `notificationService.js` - 23.9KB（通知系统）
-4. `pollingMonitorService.js` - 25.9KB（轮询监控）
-5. `cacheCommand.js` - 17.0KB（缓存管理）
+4. `cacheCommand.js` - 17.0KB（缓存管理）
+5. `InteractiveMode.js` - 13.6KB (交互式挂单模式)
 
 ### 服务层分布
 

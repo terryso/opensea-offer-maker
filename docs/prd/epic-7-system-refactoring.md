@@ -130,28 +130,28 @@
 **So that** 代码更易维护、测试和扩展
 
 **验收标准:**
-- [ ] `listCommand.js`从1,359行减少到<300行
-- [ ] 创建`InteractiveListingService`处理业务逻辑
-- [ ] 创建`PricingCalculator`处理价格计算
-- [ ] 创建`SelectionManager`处理NFT/集合选择
-- [ ] 创建`FlowStateManager`管理交互状态
-- [ ] 所有新服务有完整的单元测试
-- [ ] 保持现有CLI接口不变
+- [ ] `listCommand.js` 收敛至轻量化协调器，职责仅限参数验证、模式路由和统一错误处理。
+- [ ] 严格分离交互模式 (`InteractiveMode.js`) 与直接模式 (`DirectMode.js`) 的逻辑。
+- [ ] 提取共享业务逻辑到 `src/listing/shared/` 模块 (如 `pricing.js`, `fees.js`)。
+- [ ] 创建 `src/listing/orchestrator.js` 协调两种模式的共同流程。
+- [ ] 不新增服务或类，仅进行文件拆分和函数提取，保持函数式编程风格。
+- [ ] 保持CLI接口、用户输出和外部交互完全不变。
 
 **技术任务:**
-```javascript
-// 新架构设计
+```
+// 最终实现架构
 src/
-├── commands/
-│   └── listCommand.js (简化后 ~200行)
-├── services/
-│   ├── InteractiveListingService.js
-│   ├── PricingCalculator.js
-│   ├── ListingConfirmationService.js
-│   └── SelectionManager.js
-└── utils/
-    ├── FlowStateManager.js
-    └── ExecutionContext.js
+├── commands/listCommand.js (简化后 ~85行)
+└── listing/
+    ├── orchestrator.js (模式协调器)
+    ├── modes/
+    │   ├── InteractiveMode.js (交互模式处理器)
+    │   └── DirectMode.js (直接模式处理器)
+    └── shared/
+        ├── pricing.js (定价计算)
+        ├── fees.js (费用处理)
+        ├── validators.js (参数验证)
+        └── utils.js (通用工具)
 ```
 
 #### 🔧 Story 7.4: 通用执行上下文重构

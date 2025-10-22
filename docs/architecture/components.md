@@ -135,6 +135,7 @@
 - `setCachedCollectionStats(slug, stats, ttl)` - 缓存集合统计
 - `clearCache()` - 清理所有缓存
 - `getCacheSize()` - 获取缓存大小
+- `loadCache(wallet, chain)` - 加载指定钱包和链的NFT缓存，供交互式挂单使用。
 
 **缓存策略**：
 - TTL（生存时间）支持
@@ -234,6 +235,37 @@
 - 费用估算和确认
 - 购买限额检查
 - 交易状态跟踪
+
+## 挂单流程组件
+
+### ListingOrchestrator - 挂单协调器
+
+**职责**: 创建并提供挂单流程所需的上下文环境，包括API实例、钱包信息和链配置。
+
+**文件位置**: `src/listing/orchestrator.js`
+
+**关键接口**:
+- `createApiContext(chainConfig)` - 根据链配置创建API上下文，注入到挂单模式中。
+
+**设计特点**:
+- **依赖注入**: 将API上下文注入到不同的挂单模式中，实现了解耦。
+- **单一入口**: 为挂单流程提供统一的初始化入口。
+
+### ListingModes - 挂单模式 (策略模式)
+
+**职责**: 实现具体的挂单逻辑，分为交互式和直接两种模式。
+
+**文件位置**: `src/listing/modes/`
+
+**关键组件**:
+- **`InteractiveMode.js`**: 交互式挂单模式。从缓存中加载NFTs，使用`inquirer`库让用户选择要挂单的NFT，然后执行挂单流程。
+- **`DirectMode.js`**: 直接挂单模式。根据命令行参数直接执行挂单，无需用户交互。
+
+**设计特点**:
+- **策略模式**: `listCommand`根据`--interactive`选项选择不同的挂单模式执行，将算法的选择与使用分离开。
+- **职责分离**: 将复杂的交互逻辑和直接的执行逻辑分离开，使代码更清晰。
+
+---
 
 ## 工具组件
 
@@ -347,29 +379,32 @@
 ## 组件交互图
 
 ```mermaid
-graph TB
-    Commands[CLI 命令层] --> OfferService
-    Commands --> BuyService
-    Commands --> CacheService
+graph TD
+    subgraph "CLI Commands"
+        ListCmd[list]
+        CacheCmd[cache]
+    end
 
-    OfferService --> OpenSeaApi
-    OfferStrategy --> OfferService
-    OfferStrategy --> OpenSeaApi
+    subgraph "Listing Module"
+        ListingOrchestrator[Orchestrator]
+        InteractiveMode[Interactive Mode]
+        DirectMode[Direct Mode]
+    end
 
-    StreamService --> NotificationService
-    PollingMonitorService --> NotificationService
-    StreamService --> CacheService
-    PollingMonitorService --> OpenSeaApi
+    subgraph "Core Services"
+        CacheSvc[CacheService]
+        ApiSvc[OpenSeaApi]
+    end
 
-    OpenSeaApi --> Logger
-    CacheService --> Logger
-    NotificationService --> Logger
+    ListCmd --> ListingOrchestrator
+    ListingOrchestrator --> InteractiveMode
+    ListingOrchestrator --> DirectMode
+    
+    InteractiveMode --> CacheSvc
+    DirectMode --> CacheSvc
+    CacheCmd --> CacheSvc
 
-    Commands --> CommandUtils
-    CommandUtils --> KeyManager
-    CommandUtils --> ConfigManager
-
-    CommandUtils --> Logger
+    CacheSvc --> ApiSvc
 
     style OfferStrategy fill:#ff9
     style KeyManager fill:#f99
