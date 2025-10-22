@@ -6,7 +6,6 @@
  */
 
 import {
-  BaseError,
   ValidationError,
   ConfigurationError,
   NetworkError,

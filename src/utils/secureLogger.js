@@ -9,7 +9,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { hostname } from 'os';
 import { sanitizeErrorMessage, sanitizeObject } from './errorSanitizer.js';
-import { BaseError, isCustomError } from './errors.js';
+import { ValidationError, isCustomError } from './errors.js';
 import logger from './logger.js';
 
 /**
@@ -317,7 +317,7 @@ export class SecureLogger {
     console.error('Please review the secure logs for more details.\n');
 
     // Log the alert itself
-    this.writeToSecureLog('alert', `Security alert triggered`, event);
+    this.writeToSecureLog('alert', 'Security alert triggered', event);
   }
 
   /**

@@ -16,7 +16,7 @@ import { createListingData, calculateListingPrice, getListingInformation, execut
 export async function executeDirectMode(options, context) {
   logger.debug('Starting direct listing mode');
 
-  const { apiContext, cacheService } = context;
+  const { apiContext } = context;
 
   try {
     // Validate and extract pricing parameters

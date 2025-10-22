@@ -3,7 +3,6 @@ import { ConfigManager } from '../utils/configManager.js';
 import { ethers } from 'ethers';
 import { KeyManager } from '../utils/keyManager.js';
 import enquirer from 'enquirer';
-const { prompt } = enquirer;
 
 export const addChainOption = (command) => {
   return command.option(

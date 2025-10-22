@@ -120,7 +120,7 @@ export function formatFeeBreakdown(feeBreakdown) {
     hasCreatorFees
   } = feeBreakdown;
 
-  let feeText = `📊 Fee Breakdown:\n`;
+  let feeText = '📊 Fee Breakdown:\n';
   feeText += `   OpenSea Fee: ${openseaFeePercent}% (${openseaFeeAmount.toFixed(6)} ETH)\n`;
 
   if (hasCreatorFees) {
@@ -149,7 +149,7 @@ export function hasCreatorFees(feeInfo) {
  * @returns {number} Effective creator fee percentage
  */
 export function getEffectiveCreatorFeePercent(feeInfo, payOptionalRoyalties) {
-  if (!feeInfo) return 0;
+  if (!feeInfo) {return 0;}
 
   return feeInfo.requiredCreatorFeePercent +
          (payOptionalRoyalties ? feeInfo.optionalCreatorFeePercent : 0);

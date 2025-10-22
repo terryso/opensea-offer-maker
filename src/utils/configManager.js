@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { SUPPORTED_CHAINS, FALLBACK_DEFAULT_CHAIN } from '../constants/chains.js';
+import { SUPPORTED_CHAINS } from '../constants/chains.js';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const currentDirPath = dirname(currentFilePath);

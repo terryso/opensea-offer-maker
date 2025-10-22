@@ -170,7 +170,7 @@ export async function executeOpenSeaListing(listingData, apiContext, options) {
   // Execute listing
   const result = await openseaApi.createListing(listingParams);
 
-  logger.info(`✅ Listing created successfully on OpenSea`);
+  logger.info('✅ Listing created successfully on OpenSea');
   logger.debug(`Listing result: ${JSON.stringify(result, null, 2)}`);
 
   return result;

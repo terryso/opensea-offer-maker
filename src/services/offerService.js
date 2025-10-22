@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import { WETH_ABI } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { ValidationError, ConfigurationError, NetworkError, wrapError } from '../utils/errors.js';
+import { ValidationError, ConfigurationError } from '../utils/errors.js';
 import { ErrorHandler } from '../utils/errorHandler.js';
 
 export class OfferService {

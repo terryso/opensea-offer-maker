@@ -5,7 +5,10 @@ import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL } from '../config.js';
 import { OpenSeaApi } from '../services/openseaApi.js';
 import { OfferStrategy } from '../services/offerStrategy.js';
 import { OfferService } from '../services/offerService.js';
-import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
+import {
+  getWallet,
+  getEffectiveChain
+} from '../utils/commandUtils.js';
 import { SUPPORTED_CHAINS, DEFAULT_CHAIN } from '../config.js';
 
 // 创建父命令

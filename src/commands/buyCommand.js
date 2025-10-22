@@ -4,7 +4,7 @@ import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL } from '../config.js';
 import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 import { OpenSeaApi } from '../services/openseaApi.js';
 import { buySpecificNFT, buyFloorNFT } from '../services/buyService.js';
-import { OpenSeaSDK, Chain } from 'opensea-js';
+import { OpenSeaSDK } from 'opensea-js';
 
 export const buyCommand = new Command('buy')
   .description('Buy a specific NFT or floor NFT from a collection')

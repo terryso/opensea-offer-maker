@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { analyzePasswordStrength, secureClear } from './encryptionUtils.js';
+import { analyzePasswordStrength } from './encryptionUtils.js';
 import { timingSafeEqual } from 'crypto';
 
 /**

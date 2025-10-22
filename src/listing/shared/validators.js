@@ -3,8 +3,6 @@
  * Pure functions for validating command options and parameters
  */
 
-import { logger } from '../../utils/logger.js';
-
 /**
  * Validate command line option combinations
  * @param {Object} options - Command options

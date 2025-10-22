@@ -132,8 +132,8 @@ export function validatePricingParameters(options) {
 
   return {
     method: options.price ? 'absolute' :
-           options.floorDiff ? 'floor-diff' :
-           options.profitMargin ? 'profit-margin' : 'profit-percent',
+      options.floorDiff ? 'floor-diff' :
+        options.profitMargin ? 'profit-margin' : 'profit-percent',
     value: options.price || options.floorDiff || options.profitMargin || options.profitPercent
   };
 }

@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { logger, LogLevel } from '../utils/logger.js';
+import { logger } from '../utils/logger.js';
 import { OPENSEA_API_KEY, OPENSEA_API_BASE_URL } from '../config.js';
 import { OpenSeaApi } from '../services/openseaApi.js';
 import { addChainOption, getEffectiveChain } from '../utils/commandUtils.js';

@@ -51,70 +51,70 @@ export async function executeInteractiveMode(options, context) {
   try {
     while (currentStep !== FLOW_STEPS.DONE && currentStep !== FLOW_STEPS.CANCELLED) {
       switch (currentStep) {
-        case FLOW_STEPS.SELECT_COLLECTION:
-          const collectionResult = await selectCollection(cacheService, walletAddress, chain);
-          if (collectionResult === CANCEL_SIGNAL) {
-            currentStep = FLOW_STEPS.CANCELLED;
-            break;
-          }
-          if (collectionResult === BACK_SIGNAL) {
-            // No previous step, so cancel
-            currentStep = FLOW_STEPS.CANCELLED;
-            break;
-          }
-          selectedCollection = collectionResult;
+      case FLOW_STEPS.SELECT_COLLECTION:
+        const collectionResult = await selectCollection(cacheService, walletAddress, chain);
+        if (collectionResult === CANCEL_SIGNAL) {
+          currentStep = FLOW_STEPS.CANCELLED;
+          break;
+        }
+        if (collectionResult === BACK_SIGNAL) {
+          // No previous step, so cancel
+          currentStep = FLOW_STEPS.CANCELLED;
+          break;
+        }
+        selectedCollection = collectionResult;
+        currentStep = FLOW_STEPS.SELECT_NFT;
+        break;
+
+      case FLOW_STEPS.SELECT_NFT:
+        const nftResult = await selectNFT(selectedCollection, cacheService, walletAddress, chain);
+        if (nftResult === CANCEL_SIGNAL) {
+          currentStep = FLOW_STEPS.CANCELLED;
+          break;
+        }
+        if (nftResult === BACK_SIGNAL) {
+          currentStep = FLOW_STEPS.SELECT_COLLECTION;
+          break;
+        }
+        selectedNFT = nftResult;
+        currentStep = FLOW_STEPS.SELECT_PRICING_METHOD;
+        break;
+
+      case FLOW_STEPS.SELECT_PRICING_METHOD:
+        const methodResult = await selectPricingMethod(selectedNFT, apiContext.openseaApi, apiContext.chainConfig);
+        if (methodResult === CANCEL_SIGNAL) {
+          currentStep = FLOW_STEPS.CANCELLED;
+          break;
+        }
+        if (methodResult === BACK_SIGNAL) {
           currentStep = FLOW_STEPS.SELECT_NFT;
           break;
+        }
+        pricingMethod = methodResult.method;
+        pricingValue = methodResult.value;
+        currentStep = FLOW_STEPS.CONFIRM;
+        break;
 
-        case FLOW_STEPS.SELECT_NFT:
-          const nftResult = await selectNFT(selectedCollection, cacheService, walletAddress, chain);
-          if (nftResult === CANCEL_SIGNAL) {
-            currentStep = FLOW_STEPS.CANCELLED;
-            break;
-          }
-          if (nftResult === BACK_SIGNAL) {
-            currentStep = FLOW_STEPS.SELECT_COLLECTION;
-            break;
-          }
-          selectedNFT = nftResult;
+      case FLOW_STEPS.CONFIRM:
+        const confirmResult = await confirmListing(
+          selectedNFT,
+          pricingMethod,
+          pricingValue,
+          options,
+          apiContext
+        );
+        if (confirmResult === CANCEL_SIGNAL) {
+          currentStep = FLOW_STEPS.CANCELLED;
+          break;
+        }
+        if (confirmResult === BACK_SIGNAL) {
           currentStep = FLOW_STEPS.SELECT_PRICING_METHOD;
           break;
+        }
 
-        case FLOW_STEPS.SELECT_PRICING_METHOD:
-          const methodResult = await selectPricingMethod(selectedNFT, apiContext.openseaApi, apiContext.chainConfig);
-          if (methodResult === CANCEL_SIGNAL) {
-            currentStep = FLOW_STEPS.CANCELLED;
-            break;
-          }
-          if (methodResult === BACK_SIGNAL) {
-            currentStep = FLOW_STEPS.SELECT_NFT;
-            break;
-          }
-          pricingMethod = methodResult.method;
-          pricingValue = methodResult.value;
-          currentStep = FLOW_STEPS.CONFIRM;
-          break;
-
-        case FLOW_STEPS.CONFIRM:
-          const confirmResult = await confirmListing(
-            selectedNFT,
-            pricingMethod,
-            pricingValue,
-            options,
-            apiContext
-          );
-          if (confirmResult === CANCEL_SIGNAL) {
-            currentStep = FLOW_STEPS.CANCELLED;
-            break;
-          }
-          if (confirmResult === BACK_SIGNAL) {
-            currentStep = FLOW_STEPS.SELECT_PRICING_METHOD;
-            break;
-          }
-
-          // Listing completed successfully
-          currentStep = FLOW_STEPS.DONE;
-          return confirmResult;
+        // Listing completed successfully
+        currentStep = FLOW_STEPS.DONE;
+        return confirmResult;
       }
     }
 

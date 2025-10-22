@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { OpenSeaSDK } from 'opensea-js';
-import { logger, LogLevel } from '../utils/logger.js';
+import { logger } from '../utils/logger.js';
 import { OPENSEA_API_KEY } from '../config.js';
 import { addChainOption, getEffectiveChain, addPrivateKeyOption, getWallet } from '../utils/commandUtils.js';
 import { ValidationError } from '../utils/errors.js';
